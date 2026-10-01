@@ -1,0 +1,223 @@
+{
+  "source_project": "OpenSource-RAG-Template",
+  "files": [
+    {
+      "path": "pyproject.toml",
+      "sha256": "F34B5D7DC49D67FFD00F95562850B194DE108DDC89A36C00F2198952A64E82E7"
+    },
+    {
+      "path": "uv.lock",
+      "sha256": "4317869BA2280F687171FBC25CBBEB7086153639C987FC1B30A422423A880AEF"
+    },
+    {
+      "path": "main.py",
+      "sha256": "E190397CF62620159A09FB8A23E0E3C37402DDEBAE98C9030C45CB59AE1A29F6"
+    },
+    {
+      "path": "streamlit_app.py",
+      "sha256": "0B228AD566B80B0C54B9FF9F2B9D444057552EBC03B19175849F909D0FA7E084"
+    },
+    {
+      "path": ".env.example",
+      "sha256": "2E837ADC33D151002220C6BFD345E157CF074249FEB245E232835963CB8C631B"
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "273391A750F9671D7CCB83C6CF4067990D2E496A344B657144A50EBC9442B753"
+    },
+    {
+      "path": ".dockerignore",
+      "sha256": "2A7B1E32753289182E286C911AB5C270845B85E2C4D0DCD1462B3B10B6FDF6E3"
+    },
+    {
+      "path": ".vercelignore",
+      "sha256": "8CEAB0A8A9BE98FBB2CB25DECA1E7C56F0B86E018BDF788B37D0A4812DB13E23"
+    },
+    {
+      "path": "Dockerfile",
+      "sha256": "A98A0E851B1FC97FF177225CB6B6100A58F2059AF98D121241F379F01C979065"
+    },
+    {
+      "path": "docker-compose.yml",
+      "sha256": "DEFE552D5D58AE865D130A9019B2BC3F0107C1AD333FDBB30EEEA373B823B56C"
+    },
+    {
+      "path": "scripts\\setup_env.py",
+      "sha256": "E24BB4C3521E3B3F3D9CD55E08EF6461D8F478A6CA4C9A0331B7D48EC9026468"
+    },
+    {
+      "path": "scripts\\ingest_faq.py",
+      "sha256": "BFCC949E91A3AAF0929FCC9F55579A06A2FC9D505BCA8A2BA355BB77365ED0F1"
+    },
+    {
+      "path": "scripts\\evaluate_retrieval.py",
+      "sha256": "DE5956B688CB5208DC7B24D5F26D4966947A4084EA4BFBDEA5D339E045296EA4"
+    },
+    {
+      "path": "docs\\architecture.md",
+      "sha256": "D0AA131165CB35CA1001932D5ED01B5C0F00295B30793A0DB75A85514799F5D3"
+    },
+    {
+      "path": "docs\\testing.md",
+      "sha256": "69BDA5A0406FE63DD6B123E9BFA5A0B26D0EA8E6C366666DA138D63A7CD14D7A"
+    },
+    {
+      "path": "docs\\ui-testing.md",
+      "sha256": "6BCC94BF9535516FDE38A5FA8AEA36913552B9C24C8DF14BDFE57D2BE4B55B4B"
+    },
+    {
+      "path": "examples\\faq\\sample.md",
+      "sha256": "83BFA433F0F7944FA2AB5D25A248362514A0E8B65FFF89743AF6D5DCAF644384"
+    },
+    {
+      "path": "examples\\embedding-demo\\sample.md",
+      "sha256": "D4D5B6BC02FA0DB046F2B0EBFEB93D099D03D7B9C6A3C02E319E6128C6907698"
+    },
+    {
+      "path": "data\\public\\.gitkeep",
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "data\\private\\.gitkeep",
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "src\\faq_agent\\__init__.py",
+      "sha256": "A84D23D32EF50487F4BE779A6462B620EFAD1FBCE6D452BA7C48CB5F41B8D9EA"
+    },
+    {
+      "path": "src\\faq_agent\\config.py",
+      "sha256": "2B2D45964CF1C5756E0854BB46C9DB26CB3CA559AFD1D469DE9D1BF05DF7E500"
+    },
+    {
+      "path": "src\\faq_agent\\schemas.py",
+      "sha256": "FEBCF92F4141F6CB08810C5D2178A485C240D232437D30AC0DA36C82C0896469"
+    },
+    {
+      "path": "src\\faq_agent\\api\\__init__.py",
+      "sha256": "6121FD80DB4E392E230B9D694740572B91B9AAAE40749E295ACE60BC4B80CBAE"
+    },
+    {
+      "path": "src\\faq_agent\\api\\documents.py",
+      "sha256": "DFB0A752CC2F152959170669F27F3B7E256A7A18C5F34473C51A1CA8767C0E2C"
+    },
+    {
+      "path": "src\\faq_agent\\api\\routes.py",
+      "sha256": "45AB13BE3A01AD21ACD9EBFBEF69F9FB511161A037A487F932B17934CAA6587F"
+    },
+    {
+      "path": "src\\faq_agent\\chunking\\__init__.py",
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "src\\faq_agent\\chunking\\chunker.py",
+      "sha256": "AF6B84CE184C82630A62A12502BCBF57BD0C3F00A7045582E1FE1C17348B5C7B"
+    },
+    {
+      "path": "src\\faq_agent\\embeddings\\__init__.py",
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "src\\faq_agent\\embeddings\\embedder.py",
+      "sha256": "7AC923A20A9DD324631B17F2BD39CB0F8BA7776C0FBC7A576928F48DE16BE894"
+    },
+    {
+      "path": "src\\faq_agent\\ingestion\\__init__.py",
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "src\\faq_agent\\ingestion\\loader.py",
+      "sha256": "87B0A8A69A513C433E2963AB488F144540EEAF9632D1E387E6015EE8451CEB2A"
+    },
+    {
+      "path": "src\\faq_agent\\ingestion\\service.py",
+      "sha256": "B921CEDD3F2E79FD64ADA44C9390FD8ED8E86E0C2BA959A5106CE139450FE79C"
+    },
+    {
+      "path": "src\\faq_agent\\llm\\__init__.py",
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "src\\faq_agent\\llm\\client.py",
+      "sha256": "E05AEADFF19A3FC1E6BC36CFD291A686F36766DBF3189530FA4477ADB82F44D1"
+    },
+    {
+      "path": "src\\faq_agent\\prompts\\__init__.py",
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "src\\faq_agent\\prompts\\templates.py",
+      "sha256": "B59FBA1009C65A47585417D24EE946E5A498D047DBEFAA14B0D978750FDC7EC1"
+    },
+    {
+      "path": "src\\faq_agent\\retrieval\\__init__.py",
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "src\\faq_agent\\retrieval\\retriever.py",
+      "sha256": "454ACCC52CD9F68317CBC9F24764AB0203152D2F7F6C3723E1823C17F099A302"
+    },
+    {
+      "path": "src\\faq_agent\\vectordb\\__init__.py",
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "src\\faq_agent\\vectordb\\vector_store.py",
+      "sha256": "A6462FC0BFC2EBF63DB2F520C34220EC75C68BAF0B019902A8D8AECD2FD35CD3"
+    },
+    {
+      "path": "tests\\test_api.py",
+      "sha256": "B28C8B82CAB6B7ECAA013FF267DB7083E9C570C3F63403C3D6F9667F61354945"
+    },
+    {
+      "path": "tests\\test_basic_rag.py",
+      "sha256": "A2ED3AEFCD7047524168189CD1C8E51CFDE1017F2E0337590DE794B452926009"
+    },
+    {
+      "path": "tests\\test_chunking.py",
+      "sha256": "0D4B3D70423FBCD58C5EC07932CD6AEADD9C872F9A4A5E09F0BFA5388936CB71"
+    },
+    {
+      "path": "tests\\test_embeddings.py",
+      "sha256": "E4F2DFDEDE32EB3D7104459B9B26071BE1BB79C2F130E4C7541B62C40F7A9F5D"
+    },
+    {
+      "path": "tests\\test_evaluation.py",
+      "sha256": "D7C2FACE98FA83AFA0791FF515B1BC8FF71B1A9DAF6893D6A7F65A3C9139B3A2"
+    },
+    {
+      "path": "tests\\test_faq_context.py",
+      "sha256": "536F61C23095B027304226283E1FF96295A9581B68E78E18AEEDEED03FC0DBB2"
+    },
+    {
+      "path": "tests\\test_ingest_preview.py",
+      "sha256": "9D4E47249395AA1504B311EF250A9FBDE462B8989BD4F6ABB7285D53657BBD9C"
+    },
+    {
+      "path": "tests\\test_library.py",
+      "sha256": "654364D52CABA4132C60107A8300DBC2AFEF42F9F195F9033268026414202FAF"
+    },
+    {
+      "path": "tests\\test_pipeline.py",
+      "sha256": "71A73A8606DB14F7C4C2F7435646ACA220324C1E7F2A7FF3D4E4BF2543BC3C8C"
+    },
+    {
+      "path": "tests\\test_search.py",
+      "sha256": "880B00D5CBA8B9B914A796A37828A9C9933B31E95EB488C6BBD46B13501CA18E"
+    },
+    {
+      "path": "tests\\test_setup_env.py",
+      "sha256": "2CB474F1B05D04BDFAAAE828BCF8C099AA9B1CAAA3B775FB7FD47CC42A2E134F"
+    },
+    {
+      "path": "tests\\test_streamlit_ui.py",
+      "sha256": "A170F9A2B3C801960A0D825D2FEED698C23E9359E5D411112CCEEB316DD3567D"
+    },
+    {
+      "path": "tests\\test_vector_store.py",
+      "sha256": "E4ACD5244A00567DB4134AFB68D466FCF37705CFC1EA672D209A7FA3D608D538"
+    }
+  ],
+  "source_revision": "62d6d3af3811461c3f907b14363a2fd8bee26b03",
+  "copied_at_utc": "2026-09-20T17:21:21.1813790Z"
+}

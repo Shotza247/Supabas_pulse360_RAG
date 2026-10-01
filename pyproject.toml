@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "faq-document-rag"
+version = "0.2.0"
+description = "Document RAG with FastAPI, Streamlit, Qdrant and hosted Hugging Face models."
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+  "fastapi>=0.115,<1", "uvicorn>=0.30,<1", "python-dotenv>=1,<2",
+  "requests>=2.32,<3", "qdrant-client>=1.14,<2", "psycopg[binary]>=3.2,<4",
+  "pypdf>=5,<7", "python-docx>=1.1,<2", "python-multipart>=0.0.18,<1",
+]
+
+[project.optional-dependencies]
+ui = ["streamlit>=1.57,<2"]
+chroma = ["chromadb-client>=1,<2"]
+dev = ["pytest>=8,<10", "ruff>=0.6,<1", "httpx>=0.27,<1"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "scripts", "tests"]

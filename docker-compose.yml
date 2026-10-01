@@ -1,0 +1,17 @@
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.19.0
+    ports:
+      - "127.0.0.1:${QDRANT_PORT:-6333}:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+  chroma:
+    image: chromadb/chroma:1.5.9
+    profiles: ["chroma"]
+    ports:
+      - "127.0.0.1:${CHROMA_PORT:-8001}:8000"
+    volumes:
+      - chroma_data:/data
+volumes:
+  qdrant_data:
+  chroma_data:
