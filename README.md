@@ -116,6 +116,9 @@ where table_schema = 'rag'
   and column_default is null
 order by table_name, ordinal_position;
 ```
+## My Supabase pgvectorDB Output:
+<img width="250" height="360" alt="Screenshot 2026-10-02 021247" src="https://github.com/user-attachments/assets/794ccc0f-95fa-4cb5-ab51-389f066678e9" />
+
 
 If you rename columns or add new required ones, add the matching keys in
 `supabase_pgvector_test.py` and record the change in [BUG_AUDIT.md](BUG_AUDIT.md).
