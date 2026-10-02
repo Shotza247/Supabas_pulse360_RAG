@@ -147,6 +147,7 @@ def insert_document(
         "filename": stored_filename,
         "category": category,
         "status": "COMMITTED",
+        "sha256": digest,          # <-- add this
         "checksum": digest,
         "content_hash": digest,
         "embedding_model": settings.embedding_model,
@@ -169,6 +170,7 @@ def insert_document(
                 "document_id": document_id,
                 "content": chunk.text,
                 "chunk_index": index,
+                "ordinal": index,          # <-- add this
                 "page_number": chunk.metadata.get("page"),
                 "embedding": vector_literal(vector),
                 "metadata": json.dumps(chunk.metadata),

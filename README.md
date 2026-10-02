@@ -89,3 +89,33 @@ Cleanup removes only documents marked with the reserved
 `__pgvector_test__/` filename prefix, their chunks and embeddings. It never
 drops or deletes `test_collection`. Full instructions are in
 [`docs/supabase-pgvector-smoke-test.md`](docs/supabase-pgvector-smoke-test.md).
+
+## Schema gotchas to check before embedding
+
+`insert_document` only writes columns that exist in your live `rag` tables and that it has
+a value for. If your schema names a NOT NULL column differently, the column is skipped
+silently and Postgres rejects the row. Check these before your first embed:
+
+- **Collection must exist.** `Collection 'test_collection' does not exist` means there is
+  no matching row in `rag.collections`. Insert one (`id`, `display_name`, `visibility`);
+  the `id` is case-sensitive and must match `SUPABASE_TEST_COLLECTION`.
+- **`rag.documents.sha256`** must be populated. The code sets `sha256`, `checksum` and
+  `content_hash` to the same text digest; any of the three that your table lacks is dropped.
+- **`rag.document_chunks.ordinal`** must be populated. The code sets both `ordinal` and
+  `chunk_index` to the chunk position; the one your table lacks is dropped.
+
+To list every required column the code must fill, run this in the Supabase SQL editor and
+confirm each one has a matching key in `document_values` or `chunk_values`:
+
+```sql
+select table_name, column_name
+from information_schema.columns
+where table_schema = 'rag'
+  and table_name in ('documents', 'document_chunks')
+  and is_nullable = 'NO'
+  and column_default is null
+order by table_name, ordinal_position;
+```
+
+If you rename columns or add new required ones, add the matching keys in
+`supabase_pgvector_test.py` and record the change in [BUG_AUDIT.md](BUG_AUDIT.md).
