@@ -7,7 +7,6 @@ from faq_agent.api import routes as api
 from faq_agent.config import Settings
 from faq_agent.llm.client import synthesize, validate_answer
 from faq_agent.retrieval import retriever
-from faq_agent.schemas import RetrievedChunk
 
 HIT = {
     "chunk_id": "a",
@@ -44,16 +43,15 @@ def test_search_and_ask_share_search(monkeypatch):
     post.assert_called_once()
 
 
-def test_vector_search_needs_no_chat_configuration(monkeypatch):
-    store, embeddings = Mock(), Mock()
-    store.search.return_value = [RetrievedChunk("a", "Refunds", 0.8)]
+def test_search_routes_to_supabase(monkeypatch):
+    """search_question always delegates to SupabaseLibrary.search."""
+    library = Mock()
+    library.search.return_value = [HIT]
     monkeypatch.setattr(retriever, "get_settings", lambda: Settings())
-    monkeypatch.setattr(retriever, "build_vector_store", lambda s: store)
-    monkeypatch.setattr(retriever, "build_embedding_client", lambda s: embeddings)
+    monkeypatch.setattr(retriever, "SupabaseLibrary", lambda s: library)
     hits = retriever.search_question("Refunds?")
-    assert hits[0]["vector_score"] == 0.8
-    assert hits[0]["rerank_score"] is None
-    store.close.assert_called_once()
+    library.search.assert_called_once_with(Settings().collection, "Refunds?", None)
+    assert hits == [HIT]
 
 
 def test_empty_search_skips_llm(monkeypatch):

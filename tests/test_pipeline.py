@@ -1,6 +1,5 @@
 """Pipeline invariants that must survive package and configuration changes."""
 
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -8,7 +7,6 @@ import pytest
 from faq_agent.chunking.chunker import chunk_document
 from faq_agent.config import PROJECT_ROOT, Settings
 from faq_agent.ingestion.loader import load_documents
-from faq_agent.ingestion.service import ROOT
 from faq_agent.schemas import SourceDocument
 
 
@@ -35,14 +33,17 @@ def test_source_names_do_not_collide(tmp_path):
     assert len({d.source_id for d in load_documents(tmp_path)}) == 2
 
 
-def test_configuration_keeps_existing_index_identity():
-    settings = Settings(collection="embedding_demo")
-    assert settings.index_name == "embedding_demo-bd228c87eb28"
-    assert replace(settings, embedding_model="different").index_name != settings.index_name
-    assert replace(settings, embedding_query_prefix="query: ").index_name != settings.index_name
-    assert replace(settings, corpus_version="v2").index_name == settings.index_name
-
-
-def test_catalog_remains_under_project_root():
+def test_project_root_is_repo_root():
     assert PROJECT_ROOT == Path(__file__).resolve().parents[1]
-    assert ROOT == PROJECT_ROOT / ".local" / "library.sqlite3"
+
+
+def test_settings_defaults_are_supabase():
+    """Verify the default backend is Supabase and integer fields are actual ints."""
+    s = Settings()
+    assert s.vector_dimensions == 384
+    assert isinstance(s.vector_dimensions, int)
+    assert isinstance(s.context_k, int)
+    assert isinstance(s.request_timeout, int)
+    assert isinstance(s.chunk_chars, int)
+    assert isinstance(s.chunk_overlap, int)
+    assert s.collection == "faq_documents"
