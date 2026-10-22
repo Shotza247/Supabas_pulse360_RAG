@@ -1,5 +1,62 @@
 # Copy verification and recovery
 
+## Critical fixes — production hardening (Critical #1 / #2 / #3)
+
+Three architectural issues in `supabase_store.py` were identified in the code
+review and fixed as a single unit.  All three relate to the upload lifecycle
+(`preview()` → `commit()`).
+
+### Fix C1 — Durable preview storage (was: in-process `_PREVIEWS` dict)
+
+- **Root cause**: Preview sessions were held in a module-level Python dict
+  (`_PREVIEWS`).  A server restart, gunicorn worker recycle, or Vercel cold
+  start silently evicted all pending previews, causing unexplained 410 errors
+  on the client side with no log evidence.
+- **Fix**: Removed `_PREVIEWS` entirely.  Previews are now persisted in a new
+  `rag.previews` table in Supabase.  The table is created idempotently on first
+  use (`CREATE TABLE IF NOT EXISTS`) and a dedicated migration script is
+  provided at `docs/migrations/001_add_rag_previews.sql`.
+- **TTL cleanup**: `_expire_previews()` runs a `DELETE WHERE created_at < now()
+  - interval '1 hour'` at the start of every `preview()` call, keeping the
+  table small without a background job.
+- **Committed flag**: After a successful `commit()` transaction the preview row
+  is marked `committed = true`, providing an audit trail of what was processed.
+
+### Fix C2 — Duplicate check before embedding API call
+
+- **Root cause**: `commit()` called the paid HuggingFace embedding API before
+  checking whether the document was already stored.  If the `checksum` column
+  was absent from the live schema the check was skipped entirely, meaning every
+  re-upload of the same file incurred an unnecessary API cost.
+- **Fix**: The duplicate check now runs first, before any call to
+  `build_embedding_client().embed_documents()`.  The guard checks `checksum`
+  first and falls back to `content_hash` so it is robust to both schema
+  variants.  Embedding is only called when the document is confirmed new.
+- **Log**: Skipped duplicates are recorded at `INFO` level:
+  `commit_skipped_duplicate collection=… digest=… document_id=…`.
+
+### Fix C3 — Explicit transaction for document + chunk inserts
+
+- **Root cause**: The document INSERT and the chunk loop ran without an
+  explicit transaction boundary.  psycopg3 wraps statements in an implicit
+  transaction, but a mid-loop failure produced no structured error log and left
+  callers with no indication of whether partial data had been written.
+- **Fix**: All inserts (document row + every chunk row + preview `committed`
+  flag update) now run inside `with connection.transaction():`.  The entire
+  block commits atomically or rolls back completely.  On failure:
+  - The error is logged at `ERROR` level with
+    `commit_transaction_failed collection=… digest=… document_id=… error_type=… error=…`
+  - The client receives HTTP 500 with a clear message: "the transaction was
+    rolled back — no partial data was written — you may retry by re-submitting
+    the same preview_id".
+  - Because the preview row is not marked `committed` until the transaction
+    succeeds, retrying with the same `preview_id` works cleanly.
+
+**Files changed**: `src/faq_agent/supabase_store.py`, `docs/architecture.md`
+**Migration required**: `docs/migrations/001_add_rag_previews.sql`
+
+---
+
 ## 2026-10-02 - Supabase smoke test: NOT NULL column-name mismatches
 
 - Status: fixed in `supabase_pgvector_test.py` (`insert_document`). Re-embedding a
