@@ -276,6 +276,10 @@ class SupabaseLibrary:
             preview = self._load_preview(connection, token, collection_id)
 
             # ── Validate schema columns before touching data ──
+            # Check that every NOT NULL column we intend to write is actually
+            # present in the live schema.  Silently skipping a column we supply
+            # causes a cryptic DB NOT NULL error further down; raising here
+            # gives operators an actionable message (see BUG_AUDIT 2026-10-02).
             document_columns = self.columns(connection, "documents")
             chunk_columns = self.columns(connection, "document_chunks")
             document_required = {"collection_id", "filename", "category", "status"}
@@ -283,7 +287,25 @@ class SupabaseLibrary:
             missing = (document_required - document_columns) | (chunk_required - chunk_columns)
             if missing:
                 raise HTTPException(
-                    500, "Supabase rag schema is missing: " + ", ".join(sorted(missing))
+                    500, "Supabase rag schema is missing required columns: "
+                    + ", ".join(sorted(missing))
+                    + ". Run docs/migrations/ scripts to align the schema.",
+                )
+            # Warn loudly when an optional column we supply is absent — the
+            # column will be skipped, but if the live schema made it NOT NULL
+            # after the migration the INSERT will still fail at the DB layer.
+            doc_optional = {"checksum", "content_hash", "embedding_model",
+                            "embedding_dimensions", "metadata"}
+            chunk_optional = {"chunk_index", "page_number", "metadata"}
+            absent_optional = (
+                (doc_optional - document_columns) | (chunk_optional - chunk_columns)
+            )
+            if absent_optional:
+                logger.warning(
+                    "commit_schema_mismatch collection=%s absent_optional_columns=%s "
+                    "— columns will be skipped; verify schema if inserts fail",
+                    collection_id,
+                    sorted(absent_optional),
                 )
 
             # ── C2 FIX: duplicate check BEFORE any embedding API call ──
