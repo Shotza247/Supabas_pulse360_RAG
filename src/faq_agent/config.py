@@ -1,7 +1,5 @@
 """Environment configuration; credentials never appear in public responses."""
 
-import hashlib
-import json
 import os
 from dataclasses import dataclass, fields
 from functools import lru_cache
@@ -16,12 +14,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 class Settings:
     app_env: str = "local"
     allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5500"
-    vector_store: str = "supabase"
-    vector_url: str = "http://localhost:6333"
-    vector_api_key: str = ""
     supabase_database_url: str = ""
     collection: str = "faq_documents"
-    corpus_version: str = "v1"
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     embedding_revision: str = "main"
     vector_dimensions: int = 384
@@ -40,41 +34,28 @@ class Settings:
     def __post_init__(self):
         if self.llm_provider != "huggingface":
             raise ValueError("Only hosted Hugging Face synthesis is currently supported")
-        if self.vector_store not in {"supabase", "qdrant", "chroma"}:
-            raise ValueError("VECTOR_STORE must be supabase, qdrant or chroma")
         if not 0 <= self.chunk_overlap < self.chunk_chars:
             raise ValueError("Require 0 <= CHUNK_OVERLAP < CHUNK_CHARS")
         if not 1 <= self.context_k <= 50:
             raise ValueError("Require 1 <= CONTEXT_K <= 50")
         if self.vector_dimensions < 1 or self.request_timeout < 1:
             raise ValueError("Dimensions and timeout must be positive")
-        if not self.collection or not self.corpus_version:
-            raise ValueError("Collection and corpus version are required")
+        if not self.collection:
+            raise ValueError("COLLECTION is required")
         if self.app_env != "local":
-            urls = [self.embedding_url, self.llm_base_url]
-            if self.vector_store != "supabase":
-                urls.append(self.vector_url)
-            if any(not url.startswith("https://") for url in urls):
+            if any(
+                not url.startswith("https://")
+                for url in [self.embedding_url, self.llm_base_url]
+            ):
                 raise ValueError("Production services require HTTPS")
 
     @property
     def origins(self):
         return [x.strip() for x in self.allowed_origins.split(",") if x.strip()]
 
-    @property
-    def index_name(self):
-        spec = [
-            self.embedding_model,
-            self.embedding_revision,
-            self.vector_dimensions,
-            self.embedding_query_prefix,
-            self.embedding_document_prefix,
-            self.chunk_chars,
-            self.chunk_overlap,
-            "chunk-v2",
-        ]
-        digest = hashlib.sha256(json.dumps(spec).encode()).hexdigest()[:12]
-        return f"{self.collection}-{digest}"
+
+# Type coercion map: field.type is a string under PEP 563 (from __future__ import annotations)
+_COERCE: dict[str, type] = {"int": int, "float": float, "str": str}
 
 
 @lru_cache
@@ -84,5 +65,5 @@ def get_settings():
     for field in fields(Settings):
         raw = os.getenv(field.name.upper())
         if raw is not None:
-            values[field.name] = field.type(raw) if field.type in (int, float) else raw
+            values[field.name] = _COERCE.get(field.type, str)(raw)
     return Settings(**values)
