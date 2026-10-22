@@ -5,11 +5,11 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import logging
 import os
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -18,11 +18,15 @@ from faq_agent.chunking.chunker import chunk_document
 from faq_agent.embeddings.embedder import build_embedding_client, validate_vectors
 from faq_agent.schemas import SourceDocument
 
+logger = logging.getLogger("faq_agent")
+
 MAX_BYTES = 10 * 1024 * 1024
-_PREVIEWS: dict[str, dict[str, Any]] = {}
+_PREVIEW_TTL = 3600  # seconds; also encoded in the rag.previews table
 
 
 def vector_literal(vector: list[float]) -> str:
+    # validate_vectors() is the caller's safety gate; this formats the
+    # already-validated floats into the pgvector wire literal.
     return "[" + ",".join(f"{value:.10g}" for value in vector) + "]"
 
 
@@ -37,6 +41,10 @@ class SupabaseLibrary:
         except ImportError as exc:
             raise HTTPException(503, "Install the psycopg dependency for Supabase support") from exc
         self.psycopg = psycopg
+
+    # ------------------------------------------------------------------ #
+    # Internal helpers                                                     #
+    # ------------------------------------------------------------------ #
 
     @contextmanager
     def connection(self):
@@ -58,7 +66,65 @@ class SupabaseLibrary:
             )
             return {row[0] for row in cursor.fetchall()}
 
-    def require_collection(self, collection_id: str):
+    def _ensure_previews_table(self, connection) -> None:
+        """Create rag.previews on first use if it does not yet exist.
+
+        This is a lightweight migration guard — it runs inside the caller's
+        connection so no extra round-trip is needed.  The table is small and
+        append-only; the DDL is idempotent via IF NOT EXISTS.
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                create table if not exists rag.previews (
+                    id            text        primary key,
+                    collection_id text        not null,
+                    filename      text        not null,
+                    digest        text        not null,
+                    chunks        jsonb       not null,
+                    created_at    timestamptz not null default now(),
+                    committed     boolean     not null default false
+                )
+                """
+            )
+
+    def _expire_previews(self, connection) -> None:
+        """Delete rows older than the TTL to keep the table small."""
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "delete from rag.previews where created_at < now() - interval '1 hour'"
+            )
+
+    def _load_preview(self, connection, token: str, collection_id: str) -> dict:
+        """Return the preview row or raise 410."""
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "select id, collection_id, filename, digest, chunks, "
+                "extract(epoch from created_at) as created "
+                "from rag.previews where id = %s",
+                (token,),
+            )
+            row = cursor.fetchone()
+        if row is None:
+            raise HTTPException(410, "Preview expired or does not belong to this collection")
+        _id, col_id, filename, digest, chunks_json, created = row
+        if col_id != collection_id:
+            raise HTTPException(410, "Preview expired or does not belong to this collection")
+        if float(created) < time.time() - _PREVIEW_TTL:
+            raise HTTPException(410, "Preview expired or does not belong to this collection")
+        return {
+            "collection_id": col_id,
+            "filename": filename,
+            "digest": digest,
+            # chunks stored as JSONB — psycopg3 returns them already parsed
+            "chunks": chunks_json if isinstance(chunks_json, list) else json.loads(chunks_json),
+        }
+
+    # ------------------------------------------------------------------ #
+    # Collection management                                                #
+    # ------------------------------------------------------------------ #
+
+    def require_collection(self, collection_id: str) -> None:
         with self.connection() as connection, connection.cursor() as cursor:
             cursor.execute("select 1 from rag.collections where id=%s", (collection_id,))
             if cursor.fetchone() is None:
@@ -67,19 +133,41 @@ class SupabaseLibrary:
     def list_collections(self):
         with self.connection() as connection, connection.cursor() as cursor:
             cursor.execute("select id from rag.collections order by id")
-            return [{"id": row[0], "dimensions": self.s.vector_dimensions, "embedding_model": self.s.embedding_model, "compatible": True} for row in cursor.fetchall()]
+            return [
+                {
+                    "id": row[0],
+                    "dimensions": self.s.vector_dimensions,
+                    "embedding_model": self.s.embedding_model,
+                    "compatible": True,
+                }
+                for row in cursor.fetchall()
+            ]
 
     def create(self, name: str):
-        if not name or not name.isascii() or not name.replace("_", "").replace("-", "").isalnum() or not name[0].islower():
+        if (
+            not name
+            or not name.isascii()
+            or not name.replace("_", "").replace("-", "").isalnum()
+            or not name[0].islower()
+        ):
             raise HTTPException(422, "Use a lowercase collection identifier")
         with self.connection() as connection, connection.cursor() as cursor:
             try:
-                cursor.execute("insert into rag.collections (id) values (%s) returning id", (name,))
+                cursor.execute(
+                    "insert into rag.collections (id) values (%s) returning id", (name,)
+                )
                 created = cursor.fetchone()[0]
             except Exception as exc:
                 connection.rollback()
-                raise HTTPException(409, "Collection could not be created; check its schema or existing ID") from exc
-        return {"id": created, "dimensions": self.s.vector_dimensions, "embedding_model": self.s.embedding_model, "compatible": True}
+                raise HTTPException(
+                    409, "Collection could not be created; check its schema or existing ID"
+                ) from exc
+        return {
+            "id": created,
+            "dimensions": self.s.vector_dimensions,
+            "embedding_model": self.s.embedding_model,
+            "compatible": True,
+        }
 
     def documents(self, collection_id: str):
         self.require_collection(collection_id)
@@ -93,8 +181,12 @@ class SupabaseLibrary:
                 """,
                 (collection_id,),
             )
-            columns = [description.name for description in cursor.description]
-            return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
+            cols = [description.name for description in cursor.description]
+            return [dict(zip(cols, row, strict=True)) for row in cursor.fetchall()]
+
+    # ------------------------------------------------------------------ #
+    # Upload workflow: preview → commit                                    #
+    # ------------------------------------------------------------------ #
 
     def preview(self, collection_id: str, filename: str, data: bytes):
         self.require_collection(collection_id)
@@ -104,70 +196,248 @@ class SupabaseLibrary:
             raise HTTPException(415, "Supported files: PDF, TXT and Markdown")
         if not data or len(data) > MAX_BYTES:
             raise HTTPException(413, "Upload must be nonempty and at most 10 MB")
+
+        # ── Extract text and chunk locally (no embeddings called here) ──
         try:
             if suffix == ".pdf":
                 from pypdf import PdfReader
                 reader = PdfReader(io.BytesIO(data))
-                pages = [(index + 1, page.extract_text() or "") for index, page in enumerate(reader.pages)]
+                pages = [
+                    (index + 1, page.extract_text() or "")
+                    for index, page in enumerate(reader.pages)
+                ]
             else:
                 pages = [(None, data.decode("utf-8-sig"))]
             digest = hashlib.sha256(data).hexdigest()
             chunks = []
             for page, text in pages:
-                document = SourceDocument(digest + ":" + str(page), filename, Path(filename).stem, text, {"filename": filename, "page": page})
-                chunks.extend(chunk_document(document, max_chars=self.s.chunk_chars, overlap_chars=self.s.chunk_overlap))
+                document = SourceDocument(
+                    digest + ":" + str(page),
+                    filename,
+                    Path(filename).stem,
+                    text,
+                    {"filename": filename, "page": page},
+                )
+                chunks.extend(
+                    chunk_document(
+                        document,
+                        max_chars=self.s.chunk_chars,
+                        overlap_chars=self.s.chunk_overlap,
+                    )
+                )
             if not chunks or len(chunks) > 100:
                 raise ValueError("No readable text or too many chunks")
         except Exception as exc:
-            raise HTTPException(422, "Cannot preview this file; use a readable PDF, TXT, or Markdown document") from exc
+            raise HTTPException(
+                422,
+                "Cannot preview this file; use a readable PDF, TXT, or Markdown document",
+            ) from exc
+
+        # ── Persist preview in Supabase so it survives restarts ──
         token = uuid4().hex
-        _PREVIEWS[token] = {"collection_id": collection_id, "filename": filename, "digest": digest, "chunks": chunks, "created": time.time()}
-        return {"preview_id": token, "collection_id": collection_id, "document_id": digest, "filename": filename, "chunks": [chunk.__dict__ for chunk in chunks], "chunk_count": len(chunks), "dimensions": self.s.vector_dimensions, "embedding_model": self.s.embedding_model, "already_stored": False, "expires_in_seconds": 3600}
+        chunks_payload = [chunk.__dict__ for chunk in chunks]
+        with self.connection() as connection:
+            self._ensure_previews_table(connection)
+            self._expire_previews(connection)
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "insert into rag.previews (id, collection_id, filename, digest, chunks) "
+                    "values (%s, %s, %s, %s, %s)",
+                    (token, collection_id, filename, digest, json.dumps(chunks_payload)),
+                )
+
+        logger.info(
+            "preview_created collection=%s filename=%s digest=%s chunks=%d token=%s",
+            collection_id,
+            filename,
+            digest,
+            len(chunks),
+            token,
+        )
+        return {
+            "preview_id": token,
+            "collection_id": collection_id,
+            "document_id": digest,
+            "filename": filename,
+            "chunks": chunks_payload,
+            "chunk_count": len(chunks),
+            "dimensions": self.s.vector_dimensions,
+            "embedding_model": self.s.embedding_model,
+            "already_stored": False,
+            "expires_in_seconds": _PREVIEW_TTL,
+        }
 
     def commit(self, collection_id: str, token: str, approved: bool, category: str = "platform"):
         if not approved:
             raise HTTPException(422, "Approve hosted processing before embedding")
-        preview = _PREVIEWS.get(token)
-        if not preview or preview["collection_id"] != collection_id or preview["created"] < time.time() - 3600:
-            raise HTTPException(410, "Preview expired or does not belong to this collection")
-        chunks = preview["chunks"]
-        with self.connection() as connection, connection.cursor() as cursor:
+
+        with self.connection() as connection:
+            self._ensure_previews_table(connection)
+            preview = self._load_preview(connection, token, collection_id)
+
+            # ── Validate schema columns before touching data ──
             document_columns = self.columns(connection, "documents")
             chunk_columns = self.columns(connection, "document_chunks")
             document_required = {"collection_id", "filename", "category", "status"}
             chunk_required = {"document_id", "content", "embedding"}
             missing = (document_required - document_columns) | (chunk_required - chunk_columns)
             if missing:
-                raise HTTPException(500, "Supabase rag schema is missing: " + ", ".join(sorted(missing)))
-            existing = None
-            if "checksum" in document_columns:
-                cursor.execute(
-                    "select id from rag.documents where collection_id=%s and checksum=%s",
-                    (collection_id, preview["digest"]),
+                raise HTTPException(
+                    500, "Supabase rag schema is missing: " + ", ".join(sorted(missing))
                 )
-                existing = cursor.fetchone()
-            if existing:
-                return {"status": "already_stored", "document_id": str(existing[0]), "chunks": 0}
-            vectors = build_embedding_client(self.s).embed_documents([chunk.text for chunk in chunks])
-            validate_vectors(vectors, len(chunks), self.s.vector_dimensions)
-            values = {"collection_id": collection_id, "filename": preview["filename"], "category": category, "status": "COMMITTED", "checksum": preview["digest"], "content_hash": preview["digest"], "embedding_model": self.s.embedding_model, "embedding_dimensions": self.s.vector_dimensions, "metadata": json.dumps({"source": "fastapi_upload"})}
-            columns = [column for column in values if column in document_columns]
-            cursor.execute(f"insert into rag.documents ({', '.join(columns)}) values ({', '.join(['%s'] * len(columns))}) returning id", tuple(values[column] for column in columns))
-            document_id = cursor.fetchone()[0]
-            for index, (chunk, vector) in enumerate(zip(chunks, vectors, strict=True)):
-                chunk_values = {"document_id": document_id, "content": chunk.text, "chunk_index": index, "page_number": chunk.metadata.get("page"), "embedding": vector_literal(vector), "metadata": json.dumps(chunk.metadata)}
-                columns = [column for column in chunk_values if column in chunk_columns]
-                cursor.execute(f"insert into rag.document_chunks ({', '.join(columns)}) values ({', '.join(['%s'] * len(columns))})", tuple(chunk_values[column] for column in columns))
-        _PREVIEWS.pop(token, None)
-        return {"status": "stored", "document_id": str(document_id), "chunks": len(chunks)}
+
+            # ── C2 FIX: duplicate check BEFORE any embedding API call ──
+            existing_id: str | None = None
+            with connection.cursor() as cursor:
+                if "checksum" in document_columns:
+                    cursor.execute(
+                        "select id from rag.documents "
+                        "where collection_id=%s and checksum=%s",
+                        (collection_id, preview["digest"]),
+                    )
+                    row = cursor.fetchone()
+                    if row:
+                        existing_id = str(row[0])
+                elif "content_hash" in document_columns:
+                    cursor.execute(
+                        "select id from rag.documents "
+                        "where collection_id=%s and content_hash=%s",
+                        (collection_id, preview["digest"]),
+                    )
+                    row = cursor.fetchone()
+                    if row:
+                        existing_id = str(row[0])
+
+            if existing_id:
+                logger.info(
+                    "commit_skipped_duplicate collection=%s digest=%s document_id=%s",
+                    collection_id,
+                    preview["digest"],
+                    existing_id,
+                )
+                return {"status": "already_stored", "document_id": existing_id, "chunks": 0}
+
+            # ── Embed only after confirming the document is new ──
+            chunks = preview["chunks"]
+            try:
+                vectors = build_embedding_client(self.s).embed_documents(
+                    [c["text"] for c in chunks]
+                )
+                validate_vectors(vectors, len(chunks), self.s.vector_dimensions)
+            except Exception as exc:
+                logger.error(
+                    "commit_embed_failed collection=%s digest=%s error=%s",
+                    collection_id,
+                    preview["digest"],
+                    type(exc).__name__,
+                )
+                raise
+
+            # ── C3 FIX: explicit transaction — document + all chunks are one atomic unit ──
+            # If any INSERT fails the entire transaction rolls back, leaving no orphaned rows.
+            # The preview row is only marked committed after a clean write so that the
+            # caller can safely retry by re-submitting the same preview_id.
+            document_id: str | None = None
+            try:
+                with connection.transaction():
+                    doc_values = {
+                        "collection_id": collection_id,
+                        "filename": preview["filename"],
+                        "category": category,
+                        "status": "COMMITTED",
+                        "checksum": preview["digest"],
+                        "content_hash": preview["digest"],
+                        "embedding_model": self.s.embedding_model,
+                        "embedding_dimensions": self.s.vector_dimensions,
+                        "metadata": json.dumps({"source": "fastapi_upload"}),
+                    }
+                    doc_cols = [c for c in doc_values if c in document_columns]
+                    with connection.cursor() as cursor:
+                        cursor.execute(
+                            f"insert into rag.documents ({', '.join(doc_cols)}) "
+                            f"values ({', '.join(['%s'] * len(doc_cols))}) returning id",
+                            tuple(doc_values[c] for c in doc_cols),
+                        )
+                        document_id = str(cursor.fetchone()[0])
+
+                        for index, (chunk, vector) in enumerate(
+                            zip(chunks, vectors, strict=True)
+                        ):
+                            chunk_values = {
+                                "document_id": document_id,
+                                "content": chunk["text"],
+                                "chunk_index": index,
+                                "page_number": chunk.get("metadata", {}).get("page"),
+                                "embedding": vector_literal(vector),
+                                "metadata": json.dumps(chunk.get("metadata", {})),
+                            }
+                            chunk_cols = [c for c in chunk_values if c in chunk_columns]
+                            cursor.execute(
+                                f"insert into rag.document_chunks ({', '.join(chunk_cols)}) "
+                                f"values ({', '.join(['%s'] * len(chunk_cols))})",
+                                tuple(chunk_values[c] for c in chunk_cols),
+                            )
+
+                        # Mark preview as committed now that the write succeeded
+                        cursor.execute(
+                            "update rag.previews set committed = true where id = %s",
+                            (token,),
+                        )
+            except Exception as exc:
+                logger.error(
+                    "commit_transaction_failed collection=%s digest=%s document_id=%s "
+                    "error_type=%s error=%s",
+                    collection_id,
+                    preview["digest"],
+                    document_id,  # may be None if the document INSERT itself failed
+                    type(exc).__name__,
+                    str(exc),
+                )
+                raise HTTPException(
+                    500,
+                    "Document storage failed; the transaction was rolled back. "
+                    "No partial data was written. You may retry by re-submitting "
+                    "the same preview_id.",
+                ) from exc
+
+        logger.info(
+            "commit_stored collection=%s filename=%s document_id=%s chunks=%d",
+            collection_id,
+            preview["filename"],
+            document_id,
+            len(chunks),
+        )
+        return {"status": "stored", "document_id": document_id, "chunks": len(chunks)}
+
+    # ------------------------------------------------------------------ #
+    # Search                                                               #
+    # ------------------------------------------------------------------ #
 
     def search(self, collection_id: str, question: str, document_id: str | None = None):
         self.require_collection(collection_id)
         vector = build_embedding_client(self.s).embed_query(question)
         with self.connection() as connection, connection.cursor() as cursor:
-            cursor.execute("select * from rag.match_document_chunks(%s::extensions.vector, %s, null, %s, 0.0)", (vector_literal(vector), collection_id, self.s.context_k))
-            columns = [description.name for description in cursor.description]
-            rows = [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
+            cursor.execute(
+                "select * from rag.match_document_chunks"
+                "(%s::extensions.vector, %s, null, %s, 0.0)",
+                (vector_literal(vector), collection_id, self.s.context_k),
+            )
+            cols = [description.name for description in cursor.description]
+            rows = [dict(zip(cols, row, strict=True)) for row in cursor.fetchall()]
         if document_id:
             rows = [row for row in rows if str(row["document_id"]) == document_id]
-        return [{"chunk_id": str(row["chunk_id"]), "text": row["content"], "title": row["filename"], "section": "", "filename": row["filename"], "page": row["page_number"], "document_id": str(row["document_id"]), "vector_score": row["similarity"], "score": row["similarity"], "rerank_score": None} for row in rows]
+        return [
+            {
+                "chunk_id": str(row["chunk_id"]),
+                "text": row["content"],
+                "title": row["filename"],
+                "section": "",
+                "filename": row["filename"],
+                "page": row["page_number"],
+                "document_id": str(row["document_id"]),
+                "vector_score": row["similarity"],
+                "score": row["similarity"],
+                "rerank_score": None,
+            }
+            for row in rows
+        ]
