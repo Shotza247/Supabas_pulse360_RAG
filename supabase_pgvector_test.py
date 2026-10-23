@@ -16,6 +16,7 @@ import io
 import json
 import os
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -37,7 +38,15 @@ TEST_FILENAME_PREFIX = "__pgvector_test__/"
 MAX_BYTES = 2 * 1024 * 1024
 
 
+@contextmanager
 def db_connection():
+    """Yield a psycopg3 connection, closing it cleanly on exit.
+
+    Used as ``with db_connection() as connection:`` throughout this module.
+    Previously returned a bare Connection object; callers relied on psycopg3's
+    Connection.__enter__ implicitly, which meant exceptions in the ``with``
+    block could leave the connection open if the caller didn't handle it.
+    """
     try:
         import psycopg
     except ImportError as exc:
@@ -46,7 +55,8 @@ def db_connection():
     database_url = os.getenv("SUPABASE_DATABASE_URL") or os.getenv("DATABASE_URL")
     if not database_url:
         raise RuntimeError("Set SUPABASE_DATABASE_URL in .env before starting the test UI.")
-    return psycopg.connect(database_url)
+    with psycopg.connect(database_url) as connection:
+        yield connection
 
 
 def table_columns(connection, table_name: str) -> set[str]:

@@ -43,11 +43,26 @@ _PREVIEW_TTL = 3600  # seconds; also encoded in the rag.previews table
 #   with the correct PostgreSQL type OID so pgvector recognises it.
 # ---------------------------------------------------------------------------
 
-def _build_vector_dumper():
-    """Return a psycopg3 Dumper class that serialises list[float] → pgvector."""
+def _register_vector_dumper(connection) -> None:
+    """Register a per-connection pgvector Dumper for list[float].
+
+    A fresh subclass is created for each connection so the ``oid``
+    attribute is never shared across concurrent connections — avoids a
+    race condition where two threads calling this function simultaneously
+    would both mutate a single module-level class attribute.
+    """
     from psycopg.adapt import Dumper
 
-    class VectorDumper(Dumper):
+    with connection.cursor() as cur:
+        cur.execute("select oid from pg_type where typname = 'vector'")
+        row = cur.fetchone()
+    if row is None:
+        raise HTTPException(503, "pgvector extension is not installed in this database")
+    vector_oid = row[0]
+
+    class _VectorDumper(Dumper):
+        oid = vector_oid
+
         def dump(self, vector):
             return ("[" + ",".join(f"{v:.10g}" for v in vector) + "]").encode()
 
@@ -56,26 +71,6 @@ def _build_vector_dumper():
             # PostgreSQL accepts it as a vector literal.
             return b"'" + self.dump(vector) + b"'"
 
-    return VectorDumper
-
-
-_VectorDumper = _build_vector_dumper()
-
-
-def _register_vector_dumper(connection) -> None:
-    """Register the VectorDumper for list on this connection.
-
-    Looks up the OID of the pgvector 'vector' type once, then binds
-    the dumper so psycopg3 uses it whenever a Python list is passed as
-    a parameter.  Safe to call multiple times on the same connection.
-    """
-    with connection.cursor() as cur:
-        cur.execute("select oid from pg_type where typname = 'vector'")
-        row = cur.fetchone()
-    if row is None:
-        raise HTTPException(503, "pgvector extension is not installed in this database")
-    vector_oid = row[0]
-    _VectorDumper.oid = vector_oid
     connection.adapters.register_dumper(list, _VectorDumper)
 
 
@@ -149,24 +144,30 @@ class SupabaseLibrary:
             )
 
     def _load_preview(self, connection, token: str, collection_id: str) -> dict:
-        """Return the preview row or raise 410."""
+        """Return the preview row or raise 410.
+
+        Filters on both ``id`` and ``collection_id`` in the same SQL query so
+        that a caller who supplies a valid token from a different collection
+        gets the same 410 response as one who supplies a non-existent token.
+        Checking collection membership in Python after fetching by id alone
+        would allow a timing oracle: an attacker could probe whether a given
+        preview_id exists in another collection by comparing response times.
+        """
         with connection.cursor() as cursor:
             cursor.execute(
-                "select id, collection_id, filename, digest, chunks, "
+                "select filename, digest, chunks, "
                 "extract(epoch from created_at) as created "
-                "from rag.previews where id = %s",
-                (token,),
+                "from rag.previews where id = %s and collection_id = %s",
+                (token, collection_id),
             )
             row = cursor.fetchone()
         if row is None:
             raise HTTPException(410, "Preview expired or does not belong to this collection")
-        _id, col_id, filename, digest, chunks_json, created = row
-        if col_id != collection_id:
-            raise HTTPException(410, "Preview expired or does not belong to this collection")
+        filename, digest, chunks_json, created = row
         if float(created) < time.time() - _PREVIEW_TTL:
             raise HTTPException(410, "Preview expired or does not belong to this collection")
         return {
-            "collection_id": col_id,
+            "collection_id": collection_id,
             "filename": filename,
             "digest": digest,
             # chunks stored as JSONB — psycopg3 returns them already parsed
