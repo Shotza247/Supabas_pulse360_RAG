@@ -363,26 +363,22 @@ class SupabaseLibrary:
                 )
 
             # ── C2 FIX: duplicate check BEFORE any embedding API call ──
+            # N1 FIX: check sha256 first — that is the column name in the live
+            # Supabase schema.  checksum and content_hash remain as fallbacks
+            # for schemas that use those names instead.
             existing_id: str | None = None
             with connection.cursor() as cursor:
-                if "checksum" in document_columns:
-                    cursor.execute(
-                        "select id from rag.documents "
-                        "where collection_id=%s and checksum=%s",
-                        (collection_id, preview["digest"]),
-                    )
-                    row = cursor.fetchone()
-                    if row:
-                        existing_id = str(row[0])
-                elif "content_hash" in document_columns:
-                    cursor.execute(
-                        "select id from rag.documents "
-                        "where collection_id=%s and content_hash=%s",
-                        (collection_id, preview["digest"]),
-                    )
-                    row = cursor.fetchone()
-                    if row:
-                        existing_id = str(row[0])
+                for col in ("sha256", "checksum", "content_hash"):
+                    if col in document_columns:
+                        cursor.execute(
+                            f"select id from rag.documents "
+                            f"where collection_id=%s and {col}=%s",
+                            (collection_id, preview["digest"]),
+                        )
+                        row = cursor.fetchone()
+                        if row:
+                            existing_id = str(row[0])
+                        break  # found the right column; don't check further
 
             if existing_id:
                 logger.info(
