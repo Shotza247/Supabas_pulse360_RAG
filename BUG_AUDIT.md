@@ -1,5 +1,47 @@
 # Copy verification and recovery
 
+## Code-review critical fixes — race condition, context manager, timing oracle (commit 847d8d1)
+
+Three critical findings from the second code review were fixed individually and
+committed as a single unit in `847d8d1`.
+
+### Fix R1 — Per-connection VectorDumper (was: shared class-level `.oid` mutation)
+
+- **Root cause**: `_build_vector_dumper()` returned a single `_VectorDumper` class
+  stored at module level.  `_register_vector_dumper()` mutated its `oid` class
+  attribute in place.  Under concurrent requests two threads could overwrite each
+  other's OID assignment — a classic shared-mutable-state race condition.
+- **Fix**: Removed the module-level factory and singleton.  `_register_vector_dumper()`
+  now creates a **fresh subclass per connection** with `oid` set as a class attribute
+  on that subclass only, so concurrent connections never share mutable state.
+- **Files changed**: `src/faq_agent/supabase_store.py`
+
+### Fix R2 — `db_connection()` proper context manager (was: bare `psycopg.connect()`)
+
+- **Root cause**: `db_connection()` in `supabase_pgvector_test.py` returned the
+  result of `psycopg.connect()` directly.  Callers used it as `with db_connection()
+  as connection:`, relying on psycopg3's `Connection.__enter__` implicitly.  If an
+  exception was raised inside the `with` block before the connection's `__exit__`
+  could run, the connection could be left open.
+- **Fix**: Added `@contextmanager` decorator.  The function now uses
+  `with psycopg.connect(database_url) as connection: yield connection` — guaranteed
+  resource cleanup on any exit path, consistent with `SupabaseLibrary.connection()`.
+- **Files changed**: `supabase_pgvector_test.py`
+
+### Fix R3 — Collection-scoped preview SQL query (was: timing oracle)
+
+- **Root cause**: `_load_preview()` fetched the preview row by `id` alone, then
+  checked `col_id != collection_id` in Python and raised 410.  An attacker who
+  knew a valid `preview_id` from collection A could probe whether it existed in
+  collection B: a matching row caused a Python-level check (faster) while a missing
+  row returned from the DB directly (slower), creating a timing side-channel.
+- **Fix**: Changed the SQL query to `WHERE id = %s AND collection_id = %s`.  No
+  Python-side membership check needed; both "not found" and "wrong collection" follow
+  the identical code path with no distinguishable timing.
+- **Files changed**: `src/faq_agent/supabase_store.py`
+
+---
+
 ## Critical fixes — production hardening (Critical #1 / #2 / #3)
 
 Three architectural issues in `supabase_store.py` were identified in the code
