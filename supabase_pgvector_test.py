@@ -30,6 +30,7 @@ from faq_agent.chunking.chunker import chunk_document  # noqa: E402
 from faq_agent.config import get_settings  # noqa: E402
 from faq_agent.embeddings.embedder import build_embedding_client  # noqa: E402
 from faq_agent.schemas import SourceDocument  # noqa: E402
+from faq_agent.supabase_store import _register_vector_dumper  # noqa: E402
 
 load_dotenv(PROJECT_ROOT / ".env")
 
@@ -40,12 +41,12 @@ MAX_BYTES = 2 * 1024 * 1024
 
 @contextmanager
 def db_connection():
-    """Yield a psycopg3 connection, closing it cleanly on exit.
+    """Yield a psycopg3 connection with the pgvector type adapter registered.
 
-    Used as ``with db_connection() as connection:`` throughout this module.
-    Previously returned a bare Connection object; callers relied on psycopg3's
-    Connection.__enter__ implicitly, which meant exceptions in the ``with``
-    block could leave the connection open if the caller didn't handle it.
+    Registers the same per-connection list[float] → pgvector Dumper used by
+    SupabaseLibrary so that any list[float] passed as a %s parameter is
+    serialised through psycopg3's normal parameterisation path — no raw
+    string interpolation via vector_literal() required.
     """
     try:
         import psycopg
@@ -56,6 +57,7 @@ def db_connection():
     if not database_url:
         raise RuntimeError("Set SUPABASE_DATABASE_URL in .env before starting the test UI.")
     with psycopg.connect(database_url) as connection:
+        _register_vector_dumper(connection)
         yield connection
 
 
@@ -119,10 +121,6 @@ def build_chunks(filename: str, text: str, *, test_document: bool = True):
     )
 
 
-def vector_literal(vector: list[float]) -> str:
-    return "[" + ",".join(f"{value:.10g}" for value in vector) + "]"
-
-
 def insert_document(
     connection,
     filename: str,
@@ -182,7 +180,7 @@ def insert_document(
                 "chunk_index": index,
                 "ordinal": index,          # <-- add this
                 "page_number": chunk.metadata.get("page"),
-                "embedding": vector_literal(vector),
+                "embedding": vector,
                 "metadata": json.dumps(chunk.metadata),
             }
             chunk_insert_columns = [column for column in chunk_values if column in chunk_columns]
@@ -213,7 +211,7 @@ def search_document(
             select chunk_id, document_id, filename, category, content, page_number, similarity
             from rag.match_document_chunks(%s::extensions.vector, %s, %s, 6, 0.0)
             """,
-            (vector_literal(vector), collection_id, category),
+            (vector, collection_id, category),
         )
         columns = [description.name for description in cursor.description]
         return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
