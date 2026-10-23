@@ -24,10 +24,59 @@ MAX_BYTES = 10 * 1024 * 1024
 _PREVIEW_TTL = 3600  # seconds; also encoded in the rag.previews table
 
 
-def vector_literal(vector: list[float]) -> str:
-    # validate_vectors() is the caller's safety gate; this formats the
-    # already-validated floats into the pgvector wire literal.
-    return "[" + ",".join(f"{value:.10g}" for value in vector) + "]"
+# ---------------------------------------------------------------------------
+# pgvector psycopg3 type adapter
+# ---------------------------------------------------------------------------
+# We register a custom Dumper so Python list[float] values are sent to
+# PostgreSQL as the pgvector wire format ("[0.1,0.2,…]") through the normal
+# psycopg3 parameterisation path — no raw string interpolation required.
+#
+# Why not use the `pgvector-python` package?
+#   It would add a dependency that is not yet in pyproject.toml.  psycopg3's
+#   Dumper API is stable and ships with the psycopg package we already depend
+#   on, so this is zero-dependency.
+#
+# How it works:
+#   _register_vector_dumper(conn) is called once per connection inside the
+#   connection() context manager.  After that, any list[float] value passed
+#   as a %s parameter is automatically serialised as "[f1,f2,…]" and sent
+#   with the correct PostgreSQL type OID so pgvector recognises it.
+# ---------------------------------------------------------------------------
+
+def _build_vector_dumper():
+    """Return a psycopg3 Dumper class that serialises list[float] → pgvector."""
+    from psycopg.adapt import Dumper
+
+    class VectorDumper(Dumper):
+        def dump(self, vector):
+            return ("[" + ",".join(f"{v:.10g}" for v in vector) + "]").encode()
+
+        def quote(self, vector):
+            # Used in COPY and literal contexts; wrap in single quotes so
+            # PostgreSQL accepts it as a vector literal.
+            return b"'" + self.dump(vector) + b"'"
+
+    return VectorDumper
+
+
+_VectorDumper = _build_vector_dumper()
+
+
+def _register_vector_dumper(connection) -> None:
+    """Register the VectorDumper for list on this connection.
+
+    Looks up the OID of the pgvector 'vector' type once, then binds
+    the dumper so psycopg3 uses it whenever a Python list is passed as
+    a parameter.  Safe to call multiple times on the same connection.
+    """
+    with connection.cursor() as cur:
+        cur.execute("select oid from pg_type where typname = 'vector'")
+        row = cur.fetchone()
+    if row is None:
+        raise HTTPException(503, "pgvector extension is not installed in this database")
+    vector_oid = row[0]
+    _VectorDumper.oid = vector_oid
+    connection.adapters.register_dumper(list, _VectorDumper)
 
 
 class SupabaseLibrary:
@@ -50,6 +99,10 @@ class SupabaseLibrary:
     def connection(self):
         try:
             with self.psycopg.connect(self.database_url) as connection:
+                # Register the list[float] → pgvector adapter once per connection
+                # so every %s placeholder that receives a Python list is sent
+                # through the type-safe path rather than raw string formatting.
+                _register_vector_dumper(connection)
                 yield connection
         except HTTPException:
             raise
@@ -390,7 +443,9 @@ class SupabaseLibrary:
                                 "content": chunk["text"],
                                 "chunk_index": index,
                                 "page_number": chunk.get("metadata", {}).get("page"),
-                                "embedding": vector_literal(vector),
+                                # Pass the raw list — VectorDumper serialises it
+                                # as "[f1,f2,…]" via psycopg3 parameterisation.
+                                "embedding": vector,
                                 "metadata": json.dumps(chunk.get("metadata", {})),
                             }
                             chunk_cols = [c for c in chunk_values if c in chunk_columns]
@@ -440,9 +495,11 @@ class SupabaseLibrary:
         vector = build_embedding_client(self.s).embed_query(question)
         with self.connection() as connection, connection.cursor() as cursor:
             cursor.execute(
+                # Pass the list directly — VectorDumper on this connection
+                # serialises it as the pgvector wire format via %s.
                 "select * from rag.match_document_chunks"
                 "(%s::extensions.vector, %s, null, %s, 0.0)",
-                (vector_literal(vector), collection_id, self.s.context_k),
+                (vector, collection_id, self.s.context_k),
             )
             cols = [description.name for description in cursor.description]
             rows = [dict(zip(cols, row, strict=True)) for row in cursor.fetchall()]
