@@ -93,6 +93,12 @@ def validate_answer(raw, matches):
     }
 
 
+# Fields sent to the LLM as evidence.  Restricted to what the model needs
+# to answer and cite — internal IDs, scores and filenames are excluded to
+# reduce token usage and avoid leaking storage details into the prompt.
+_LLM_EVIDENCE_FIELDS = ("chunk_id", "text", "title", "section")
+
+
 def synthesize(question, matches, settings):
     if not matches:
         return {"answer": ABSTENTION, "sources": [], "status": "insufficient_evidence"}
@@ -100,6 +106,14 @@ def synthesize(question, matches, settings):
         raise ValueError("Basic hosted synthesis currently supports huggingface only")
     if not settings.hf_token or not settings.llm_model:
         raise ValueError("Configure HF_TOKEN and LLM_MODEL")
+    # Strip each match to only the fields the LLM needs.  The full matches
+    # list is kept separately so validate_answer() can still build complete
+    # citation objects (including vector_score, filename, page, etc.) for
+    # the API response — those never leave the server boundary.
+    evidence = [
+        {k: m[k] for k in _LLM_EVIDENCE_FIELDS if k in m}
+        for m in matches
+    ]
     response = _post_with_retry(
         settings.llm_base_url.rstrip("/") + "/chat/completions",
         headers={"Authorization": f"Bearer {settings.hf_token}"},
@@ -111,11 +125,13 @@ def synthesize(question, matches, settings):
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {
                     "role": "user",
-                    "content": json.dumps({"question": question, "evidence": matches}),
+                    "content": json.dumps({"question": question, "evidence": evidence}),
                 },
             ],
         },
         timeout=settings.request_timeout,
     )
     raw = response.json()["choices"][0]["message"]["content"]
+    # validate_answer uses the original full matches so citations in the
+    # response carry scores, filenames and page numbers for the caller.
     return validate_answer(raw, matches)

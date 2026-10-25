@@ -1,3 +1,4 @@
+import json
 from unittest.mock import Mock
 
 import pytest
@@ -5,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from faq_agent.api import routes as api
 from faq_agent.config import Settings
-from faq_agent.llm.client import synthesize, validate_answer
+from faq_agent.llm.client import _LLM_EVIDENCE_FIELDS, synthesize, validate_answer
 from faq_agent.retrieval import retriever
 
 HIT = {
@@ -16,6 +17,9 @@ HIT = {
     "score": 0.8,
     "vector_score": 0.8,
     "rerank_score": None,
+    "document_id": "doc-uuid-1",
+    "filename": "faq.pdf",
+    "page": 1,
 }
 
 
@@ -41,6 +45,13 @@ def test_search_and_ask_share_search(monkeypatch):
     assert result.json()["sources"][0]["rerank_score"] is None
     assert search.call_count == 2
     post.assert_called_once()
+    # Verify the LLM only received the stripped evidence fields — internal
+    # IDs, scores and filenames must not appear in the prompt payload.
+    sent_payload = json.loads(post.call_args.kwargs["json"]["messages"][1]["content"])
+    assert set(sent_payload["evidence"][0].keys()) == set(_LLM_EVIDENCE_FIELDS)
+    assert "vector_score" not in sent_payload["evidence"][0]
+    assert "document_id" not in sent_payload["evidence"][0]
+    assert "filename" not in sent_payload["evidence"][0]
 
 
 def test_search_routes_to_supabase(monkeypatch):
