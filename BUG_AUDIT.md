@@ -204,3 +204,116 @@ review and fixed as a single unit.  All three relate to the upload lifecycle
 - No servers started, original configuration changed, cloud writes, model calls,
   commits or Supabase resources created during the split.
 - Next: open HANDOFF.md in a separate chat and design the Supabase implementation.
+
+---
+
+## Session 3 fixes — chunking, rate limiting, config, structure (commits b5e39fa–fa6796c)
+
+### Fix #9 — SECTION_RE colon requirement (commit `b5e39fa`)
+
+- **Root cause**: The all-caps branch matched any sequence of 4+ uppercase letters,
+  digits and punctuation regardless of a trailing colon.  Words like `IMPORTANT`,
+  `NOTE`, `FAQ`, `URL`, `N/A` and table headers were being treated as section
+  boundaries, fragmenting text into spurious single-line sections and degrading
+  retrieval quality.
+- **Fix**: Changed `:?` (optional colon) to `:$` (required colon with end-of-line anchor)
+  on the all-caps branch.  `RETURNS POLICY:` still splits; `IMPORTANT` does not.
+- **Tests added**: `test_section_re_matches_valid_headings`, `test_section_re_rejects_false_positives`,
+  `test_allcaps_content_not_split_into_sections`, `test_allcaps_label_with_colon_splits_sections`.
+- **Files changed**: `src/faq_agent/chunking/chunker.py`, `tests/test_chunking.py`
+
+### Fix #10 — `_window_text` minimum advance guard (commit `b5e39fa`)
+
+- **Root cause**: `start = max(start + 1, end - overlap_chars)` stalled at +1 per
+  iteration when `overlap_chars` was close to `max_chars`.  On a 100 000-character
+  section with `overlap=999` and `max_chars=1000` this produced ~100 000 windows,
+  hanging ingestion indefinitely.
+- **Fix**: `min_advance = max(1, overlap_chars // 2)` computed once; advance guard
+  becomes `start = max(start + min_advance, end - overlap_chars)`.
+- **Tests added**: `test_window_terminates_with_large_overlap`, `test_window_advance_is_bounded`,
+  `test_window_overlap_present`.
+- **Files changed**: `src/faq_agent/chunking/chunker.py`, `tests/test_chunking.py`
+
+### Fix #13 — Rate limiting on /search and /ask (commit `5e83ebf`)
+
+- **Root cause**: Both API endpoints had no throttle on how many requests a single
+  IP could send per second, exposing the HuggingFace API quota to exhaustion from
+  any motivated client.
+- **Fix**: Added an in-process fixed-window counter (`defaultdict`).  Limit: 30
+  requests per IP per 60-second window.  HTTP 429 is returned before any embedding
+  or DB work begins.  No external dependency added.  Counter resets between test
+  runs via an autouse pytest fixture in `tests/conftest.py`.
+- **Caveat**: In-process only — not shared across multiple workers.  A Redis/Supabase
+  counter is needed for multi-worker public deployment.
+- **Files changed**: `src/faq_agent/api/routes.py`, `tests/conftest.py`, `tests/test_api.py`
+
+### Fix #14 — SupabaseLibrary singleton (commit `3941ccf`)
+
+- **Root cause**: `search_question()` in `retriever.py` called `SupabaseLibrary(settings)`
+  on every request, opening a new psycopg3 connection and then discarding it.  Under
+  load this drained the Supabase connection limit quickly.
+- **Fix**: Added `@lru_cache(maxsize=1)` on a `_library(settings)` factory.  Since
+  `Settings` is a frozen dataclass it is hashable and safe as a cache key.  A single
+  `SupabaseLibrary` instance is reused for the process lifetime.
+- **Files changed**: `src/faq_agent/retrieval/retriever.py`, `tests/test_basic_rag.py`
+
+### Fix N3 — Settings hard crash for non-HuggingFace provider (commit `829a158`)
+
+- **Root cause**: `Settings.__post_init__` raised `ValueError` for any `llm_provider`
+  value other than `"huggingface"`.  Embedding-only or retrieval-only deployments
+  that set `llm_provider=openai` (for future use) crashed at config load time, before
+  any synthesis code was reached.
+- **Fix**: Removed the `__post_init__` guard entirely.  `synthesize()` in
+  `llm/client.py` already raises a clear `ValueError` at the point of use for
+  unsupported providers.
+- **Files changed**: `src/faq_agent/config.py`, `tests/test_api.py`
+
+### Fix N4 — Default section name "FAQ" renamed to "General" (commit `138e90b`)
+
+- **Root cause**: Documents without any markdown heading or `LABEL:` line produced
+  chunks with `section="FAQ"`.  This label was misleading for non-FAQ content (e.g.
+  product manuals, policies), and appeared as a filter option in the Streamlit UI
+  even for documents that contained no FAQ structure.
+- **Fix**: Renamed the default `current_name` from `"FAQ"` to `"General"` in
+  `_split_sections()`.  Also updated the fallback in the header-strip expression.
+- **Files changed**: `src/faq_agent/chunking/chunker.py`, `tests/test_chunking.py`,
+  `tests/test_faq_context.py`
+
+### Fix N5 — streamlit_app.py imported from smoke-test script (commit `4961787`)
+
+- **Root cause**: `streamlit_app.py` imported `build_chunks`, `db_connection`,
+  `insert_document`, `list_collections`, `parse_upload`, `require_collection` and
+  `search_document` directly from `supabase_pgvector_test.py`.  Any change to the
+  smoke-test (a dev tool) could silently break the production workspace UI with no
+  test coverage.
+- **Fix**: Extracted all shared helpers into `src/faq_agent/db_helpers.py` (a proper
+  package module with tests via the existing imports).  Both `streamlit_app.py` and
+  `supabase_pgvector_test.py` now import from `faq_agent.db_helpers`.  The smoke-test
+  is reduced to `main()` plus its own constants.
+- **Files changed**: `src/faq_agent/db_helpers.py` (new), `streamlit_app.py`,
+  `supabase_pgvector_test.py`
+
+### Fix #15 — source_id collision across directories (commit `fa6796c`)
+
+- **Root cause**: `load_document()` set `source_id = path.stem.lower().replace(" ", "-")`.
+  Two files named `faq.txt` in different directories produced the same `source_id`,
+  causing chunk deduplication and retrieval mismatches in any corpus with repeated
+  filenames across sub-directories.
+- **Fix**: `source_id = hashlib.sha256(str(path.resolve()).encode()).hexdigest()[:24]`.
+  The resolved absolute path is always unique.  This is now consistent with the
+  `load_documents()` batch path which already used sha256.
+- **Files changed**: `src/faq_agent/ingestion/loader.py`
+
+### Fix #16 — Redundant `score` alias alongside `vector_score` (commit `78717f2`)
+
+- **Root cause**: `SupabaseLibrary.search()` returned every match with both
+  `"vector_score": similarity` and `"score": similarity`.  `SearchHit` in
+  `routes.py` had a separate `score: float | None` field in addition to the
+  inherited `vector_score`.  Two fields for the same value confused callers and
+  the OpenAPI schema.
+- **Fix**: Removed `"score"` from the search result dict in `supabase_store.py`
+  and removed the `score` field from `SearchHit` in `routes.py`.  Only
+  `vector_score` remains.
+- **Files changed**: `src/faq_agent/supabase_store.py`, `src/faq_agent/api/routes.py`,
+  `tests/test_search.py`, `tests/test_basic_rag.py`
+

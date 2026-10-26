@@ -89,6 +89,25 @@ response citations by `validate_answer()` after the LLM call returns.
 
 Only committed documents are searchable.
 
+Rate limiting applies to `/search` and `/ask`: 30 requests per IP per 60-second
+window via an in-process fixed-window counter. Requests over the limit receive
+HTTP 429 before any embedding or DB work begins.
+
+The shared `SupabaseLibrary` instance is cached via `lru_cache` on the frozen
+`Settings` key — a single connection pool is reused across all requests.
+
+Shared database helpers (connection context manager, document upload/search) live
+in `faq_agent.db_helpers` so that `streamlit_app.py` and `supabase_pgvector_test.py`
+share a single implementation with no cross-dependency between UI and smoke-test.
+
+`load_document()` derives `source_id` from `sha256(resolved_path)` so files with
+the same stem in different directories always get distinct IDs, consistent with the
+batch `load_documents()` path.
+
+The default chunk section name is `"General"` for documents that contain no
+recognised heading. The section regex requires a colon for all-caps labels
+(`RETURNS POLICY:`) to avoid treating acronyms and table headers as boundaries.
+
 ## Limitations and next steps
 
 Chunking uses sections and overlapping character windows, not an embedding model.
@@ -99,12 +118,10 @@ Similarity scores are not confidence estimates. Citation validation checks that
 IDs exist in the evidence; factual quality needs evaluation. There is no active
 reranking, conversational memory, Drive sync or monitoring stack.
 
-**Open items (tracked in code-review artifact):**
-- No per-IP rate limiting — add `slowapi` (`#13`) before public deployment to
-  protect the HuggingFace quota.
-- `SupabaseLibrary` is instantiated on every request in `retriever.py` — inject
-  via FastAPI `Depends()` (`#14`) to eliminate per-request psycopg overhead.
-- Section regex in chunker (`#9`) produces false positives on all-caps content,
-  degrading retrieval quality on real documents.
-- Sliding window in chunker (`#10`) can hang on documents with large overlap values.
-- `Settings.__post_init__` hard-crashes for any non-HuggingFace provider (`N3`).
+The rate limiter is in-process and not shared across workers. A distributed cache
+(Redis or Supabase table) is needed for multi-worker deployments before public
+launch. The deleted Chroma and SQLite files (#11, #12) are not present in the
+current codebase.
+
+**All tracked code-review findings are now resolved.** See `BUG_AUDIT.md` and the
+code-review HTML artifact for the full record.
