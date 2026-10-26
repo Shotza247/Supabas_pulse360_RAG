@@ -14,7 +14,6 @@ HIT = {
     "text": "Refunds within 14 days.",
     "title": "FAQ",
     "section": "Refunds",
-    "score": 0.8,
     "vector_score": 0.8,
     "rerank_score": None,
     "document_id": "doc-uuid-1",
@@ -55,11 +54,12 @@ def test_search_and_ask_share_search(monkeypatch):
 
 
 def test_search_routes_to_supabase(monkeypatch):
-    """search_question always delegates to SupabaseLibrary.search."""
+    """search_question always delegates to SupabaseLibrary.search (via the cached _library)."""
     library = Mock()
     library.search.return_value = [HIT]
     monkeypatch.setattr(retriever, "get_settings", lambda: Settings())
-    monkeypatch.setattr(retriever, "SupabaseLibrary", lambda s: library)
+    # Patch _library so the lru_cache singleton returns our mock (finding #14).
+    monkeypatch.setattr(retriever, "_library", lambda s: library)
     hits = retriever.search_question("Refunds?")
     library.search.assert_called_once_with(Settings().collection, "Refunds?", None)
     assert hits == [HIT]
