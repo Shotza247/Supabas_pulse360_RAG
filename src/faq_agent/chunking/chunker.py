@@ -51,7 +51,7 @@ def chunk_documents(documents: list[SourceDocument]) -> list[Chunk]:
 
 
 def _split_sections(text: str) -> list[tuple[str, str]]:
-    current_name = "FAQ"
+    current_name = "General"
     current_lines: list[str] = []
     sections: list[tuple[str, str]] = []
 
@@ -61,7 +61,7 @@ def _split_sections(text: str) -> list[tuple[str, str]]:
             if current_lines:
                 sections.append((current_name, "\n".join(current_lines).strip()))
                 current_lines = []
-            current_name = line.lstrip("#").strip().rstrip(":") or "FAQ"
+            current_name = line.lstrip("#").strip().rstrip(":") or "General"
         else:
             current_lines.append(raw_line)
 

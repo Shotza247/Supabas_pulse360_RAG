@@ -66,6 +66,20 @@ def test_allcaps_content_not_split_into_sections():
     assert len(sections) == 1
 
 
+def test_default_section_is_general():
+    """Documents without any heading must use 'General' as the default section name (finding N4)."""
+    doc = SourceDocument(
+        source_id="test",
+        path="test.txt",
+        title="Test",
+        text="Just some plain text with no headings at all.",
+    )
+    chunks = chunk_document(doc, max_chars=200, overlap_chars=20)
+    assert all(c.metadata["section"] == "General" for c in chunks), (
+        f"Expected 'General' but got sections: {[c.metadata['section'] for c in chunks]}"
+    )
+
+
 def test_allcaps_label_with_colon_splits_sections():
     """A document with ALLCAPS: labels must be split into distinct sections."""
     doc = SourceDocument(
