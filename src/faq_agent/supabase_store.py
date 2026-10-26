@@ -348,7 +348,7 @@ class SupabaseLibrary:
             # Warn loudly when an optional column we supply is absent — the
             # column will be skipped, but if the live schema made it NOT NULL
             # after the migration the INSERT will still fail at the DB layer.
-            doc_optional = {"checksum", "content_hash", "embedding_model",
+            doc_optional = {"sha256", "checksum", "content_hash", "embedding_model",
                             "embedding_dimensions", "metadata"}
             chunk_optional = {"chunk_index", "page_number", "metadata"}
             absent_optional = (
@@ -417,6 +417,10 @@ class SupabaseLibrary:
                         "filename": preview["filename"],
                         "category": category,
                         "status": "COMMITTED",
+                        # Supply all three known hash column names; the column
+                        # filter (doc_cols) keeps only those present in the
+                        # live schema, so only the matching one is written.
+                        "sha256": preview["digest"],
                         "checksum": preview["digest"],
                         "content_hash": preview["digest"],
                         "embedding_model": self.s.embedding_model,
