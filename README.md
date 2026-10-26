@@ -1,111 +1,105 @@
 # Supabas_pulse360_RAG
 
-Independent starting point for a Supabase-backed RAG and vector-search template.
-Pulse360 FAQ assistance is the first target; guesthouse/property search is a future
-use case. This folder is separate from OpenSource-RAG-Template.
+Supabase-backed FAQ RAG service for Pulse360. FastAPI backend with pgvector
+similarity search, hosted HuggingFace embeddings and LLM synthesis, and a
+Streamlit workspace UI.
 
 ## Current status
 
-The Streamlit workspace, FastAPI document routes, and standalone
-`supabase_pgvector_test.py` now use the direct Supabase/pgvector path. The
-legacy Qdrant/SQLite adapters remain in the repository for older CLI/tests and
-can be removed after the Supabase route migration has been validated.
+The codebase is **Supabase-only**. All Qdrant, SQLite, and Chroma adapters
+have been removed. The FastAPI document routes, Streamlit workspace, and
+standalone smoke-test all use the direct Supabase/pgvector path.
 
-This copy includes FastAPI, the Streamlit test UI, document parsing/chunking,
-hosted HF embeddings and synthesis, storage adapters, tests and uv.lock. Secrets,
-private FAQs, catalogs, vectors, cloud migration scripts and Git history are excluded.
-The Python package name remains `faq_agent` and the dependency project name remains
-`faq-document-rag` to retain the baseline lock; use a separate virtual environment.
+**Test suite:** 46/46 offline tests pass. No live database or API keys required
+to run tests.
 
-## Target architecture
+**Code review progress:** 15 of 25 findings resolved (60%). All critical and
+high findings are closed. See the [code-review artifact](.bob/artifacts/code-review-supabas-pulse360-rag.html)
+and [BUG_AUDIT.md](BUG_AUDIT.md) for full details.
+
+## Architecture
 
 ```mermaid
 flowchart TD
-    UI[Pulse360 or Streamlit] --> API[FastAPI search and ask]
+    UI[Pulse360 or Streamlit] --> API[FastAPI /search and /ask]
     Upload[Approved document upload] --> Parse[Parse and preview chunks]
-    Parse --> Embed[Hosted embeddings]
-    Embed --> DB[(Supabase PostgreSQL: rag catalog and pgvector chunks)]
-    API --> Query[Embed question and retrieve scoped chunks]
+    Parse --> Embed[Hosted HF embeddings]
+    Embed --> DB[(Supabase PostgreSQL — rag schema + pgvector)]
+    API --> Query[Embed question · retrieve scoped chunks]
     Query --> DB
-    Query --> LLM[Hosted grounded synthesis]
-    LLM --> Answer[Answer and source citations]
+    Query --> LLM[Hosted HF LLM — stripped evidence only]
+    LLM --> Answer[Grounded answer + full citation metadata]
 ```
 
-This diagram describes the target, not the current implementation. Keep platform
-tables separate from a restricted `rag` schema. Do not grant the assistant arbitrary
-SQL access to platform data. Raw files, if retained, belong in private object storage.
+See [docs/architecture.md](docs/architecture.md) for the full sequence diagram
+and contract details.
 
-## Start the next chat
-
-Read [HANDOFF.md](HANDOFF.md), then inspect `src/faq_agent/ingestion/service.py`,
-`vectordb/vector_store.py`, `config.py`, `api/documents.py` and their tests.
-Do not modify OpenSource-RAG-Template or its running services from this project.
-
-## Reproduce the inherited baseline
+## Quick start
 
 ```powershell
-uv sync --locked --extra dev --extra ui
-.\.venv\Scripts\python.exe -m pytest -q
+uv sync --extra dev
+uv run pytest -q
 ```
 
-No `.env` is included in the repository. Create the private file at
-`C:\Users\Jabulani Ndlovu\Downloads\Project Folder\Project Folder\Idea_Not_Started\Supabas_pulse360_RAG\.env`
-and set `SUPABASE_DATABASE_URL` there for the direct smoke test. Do not commit
-that file. Baseline runtime instructions are
-in [docs/baseline-local-setup.md](docs/baseline-local-setup.md); do not reuse occupied
-ports or connect this copy to the original project's mutable data.
-
-## Guides
-
-- [Handoff and implementation gates](HANDOFF.md)
-- [Inherited architecture](docs/architecture.md): describes the copied baseline only.
-- [Inherited test guide](docs/testing.md)
-- [Inherited upload guide](docs/ui-testing.md)
-- [Copy provenance](docs/copy-manifest.json): source revision and hashes of copied files.
-
-This is a code template, not a created Supabase cloud project or a deployed service.
-
-## Direct Supabase pgvector smoke test
-
-The standalone `supabase_pgvector_test.py` Streamlit page is now wired directly
-to the existing Supabase PostgreSQL database through `SUPABASE_DATABASE_URL`.
-It does not use Qdrant, SQLite, or the baseline FastAPI upload endpoint. Use it
-to validate the `rag` schema, 384-dimensional embedding writes, and
-`rag.match_document_chunks` retrieval before migrating the full API.
+To run the Streamlit workspace (requires `SUPABASE_DATABASE_URL` in `.env`):
 
 ```powershell
 uv sync --extra ui
+uv run streamlit run streamlit_app.py --server.port 8502
+```
+
+To run the API server locally:
+
+```powershell
+uv run uvicorn main:app --host 127.0.0.1 --port 8767
+```
+
+No `.env` is included in the repository. Create the private file at the project
+root and set at minimum:
+
+```
+SUPABASE_DATABASE_URL=<your direct/session Supabase connection string>
+HF_TOKEN=<your HuggingFace API token>
+EMBEDDING_URL=<your hosted TEI endpoint>
+LLM_MODEL=<model id on HuggingFace router>
+```
+
+See `.env.example` for all supported keys and defaults.
+
+## Supabase pgvector smoke test
+
+The standalone `supabase_pgvector_test.py` Streamlit page validates the `rag`
+schema, 384-dimensional embedding writes, and `rag.match_document_chunks`
+retrieval directly against Supabase. It writes only to the configured test
+collection and uses the same psycopg3 type adapter as the production path —
+no raw vector string interpolation.
+
+```powershell
 uv run streamlit run supabase_pgvector_test.py --server.address 127.0.0.1 --server.port 8503
 ```
 
-Set the private connection string in `.env`, keep the reusable collection as
-`test_collection`, upload a small document, and then run the cleanup command:
+After testing, clean up test documents:
 
 ```powershell
 uv run python scripts/delete_supabase_test_document.py
 ```
 
-Cleanup removes only documents marked with the reserved
-`__pgvector_test__/` filename prefix, their chunks and embeddings. It never
-drops or deletes `test_collection`. Full instructions are in
+Cleanup removes only documents with the `__pgvector_test__/` filename prefix.
+It never drops the collection. Full instructions:
 [`docs/supabase-pgvector-smoke-test.md`](docs/supabase-pgvector-smoke-test.md).
 
-## Schema gotchas to check before embedding
+## Schema requirements
 
-`insert_document` only writes columns that exist in your live `rag` tables and that it has
-a value for. If your schema names a NOT NULL column differently, the column is skipped
-silently and Postgres rejects the row. Check these before your first embed:
+`commit()` and `insert_document()` both supply `sha256`, `checksum`, and
+`content_hash` as candidate hash column values. The column filter keeps only
+whichever one exists in your live schema. Before your first embed, confirm
+these NOT NULL columns are present:
 
-- **Collection must exist.** `Collection 'test_collection' does not exist` means there is
-  no matching row in `rag.collections`. Insert one (`id`, `display_name`, `visibility`);
-  the `id` is case-sensitive and must match `SUPABASE_TEST_COLLECTION`.
-- **`rag.documents.sha256`** must be populated. The code sets `sha256`, `checksum` and
-  `content_hash` to the same text digest; any of the three that your table lacks is dropped.
-- **`rag.document_chunks.ordinal`** must be populated. The code sets both `ordinal` and
-  `chunk_index` to the chunk position; the one your table lacks is dropped.
+- **`rag.documents.sha256`** (or `checksum` / `content_hash`)
+- **`rag.document_chunks.ordinal`** (or `chunk_index`)
+- **`rag.collections`** must have a row matching your collection ID
 
-To list every required column the code must fill, run this in the Supabase SQL editor and
-confirm each one has a matching key in `document_values` or `chunk_values`:
+To list every NOT NULL column the code must fill:
 
 ```sql
 select table_name, column_name
@@ -116,9 +110,14 @@ where table_schema = 'rag'
   and column_default is null
 order by table_name, ordinal_position;
 ```
+
 ## My Supabase pgvectorDB Output:
 <img width="250" height="360" alt="Screenshot 2026-10-02 021247" src="https://github.com/user-attachments/assets/794ccc0f-95fa-4cb5-ab51-389f066678e9" />
 
+## Guides
 
-If you rename columns or add new required ones, add the matching keys in
-`supabase_pgvector_test.py` and record the change in [BUG_AUDIT.md](BUG_AUDIT.md).
+- [Architecture and contracts](docs/architecture.md)
+- [Bug audit and fix history](BUG_AUDIT.md)
+- [Smoke test guide](docs/supabase-pgvector-smoke-test.md)
+- [Testing guide](docs/testing.md)
+- [Upload guide](docs/ui-testing.md)

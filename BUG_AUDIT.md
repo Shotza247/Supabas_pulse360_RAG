@@ -42,6 +42,65 @@ committed as a single unit in `847d8d1`.
 
 ---
 
+## Code-review medium fixes — vector parameterization, duplicate check, LLM evidence stripping
+
+### Fix #7 — Remove `vector_literal()` from smoke-test (commit `f52a8b8`)
+
+- **Root cause**: `supabase_pgvector_test.py` built raw SQL strings like
+  `"[0.1,0.2,…]"` via `vector_literal()` and passed them as `%s` parameters.
+  The production `SupabaseLibrary` path was already fixed in `9fe6ece` by
+  registering the psycopg3 type adapter, but the smoke-test was left behind.
+- **Fix**: Deleted `vector_literal()` entirely.  `db_connection()` now calls
+  `_register_vector_dumper(connection)` (imported from `supabase_store`) so raw
+  `list[float]` values pass through psycopg3's normal parameterisation path at
+  both call sites (`insert_document` embedding insert and `search_document` query
+  vector).  No raw string interpolation of vectors remains anywhere in the codebase.
+- **Files changed**: `supabase_pgvector_test.py`
+
+### Fix N1 — `sha256`-first duplicate check in `commit()` (commit `8d47aec`)
+
+- **Root cause**: The duplicate-check loop in `commit()` tried `checksum` first,
+  then `content_hash`.  The live Supabase schema uses the column name `sha256`.
+  Re-uploading the same document to the live schema was never detected as a
+  duplicate and always incurred an unnecessary HuggingFace embedding API call,
+  potentially creating duplicate document rows.
+- **Fix**: Replaced the two-branch `if/elif` with a priority-ordered loop over
+  `("sha256", "checksum", "content_hash")`.  The first column present in the live
+  schema is used for the lookup; the loop then breaks.  All three known schema
+  variants are covered with no behaviour change for schemas using the older names.
+- **Files changed**: `src/faq_agent/supabase_store.py`
+
+### Fix N1-b — `sha256` missing from INSERT `doc_values` (commit `700a264`)
+
+- **Root cause**: The N1 fix corrected the *read* side (duplicate-check SELECT)
+  but the *write* side (`doc_values` dict driving the INSERT for new documents)
+  still only supplied `checksum` and `content_hash`.  On the live schema, where
+  `sha256` is NOT NULL, this caused a constraint violation on every first-time
+  upload — even though re-uploads were now correctly detected as duplicates.
+  Discovered during a full code audit (2026-10-24).
+- **Fix**: Added `"sha256": preview["digest"]` to `doc_values` alongside
+  `checksum` and `content_hash`.  The existing column-filter (`doc_cols`) ensures
+  only the column present in the live schema is written.  Also added `sha256` to
+  `doc_optional` so `commit_schema_mismatch` warnings correctly track it on
+  schemas that use the older names.
+- **Files changed**: `src/faq_agent/supabase_store.py`
+
+### Fix N2 — Strip internal metadata from LLM evidence payload (commit `ce61583`)
+
+- **Root cause**: `synthesize()` serialised the full match dict — including
+  `vector_score`, `score`, `rerank_score`, `document_id`, `filename` and `page`
+  — as the LLM user message.  This inflated token usage on every `/ask` call,
+  sent internal storage identifiers to a third-party API, and contradicted the
+  system prompt's "untrusted data" framing.
+- **Fix**: Added `_LLM_EVIDENCE_FIELDS = ("chunk_id", "text", "title", "section")`.
+  `synthesize()` builds a stripped `evidence` list from those four fields before
+  serialising the prompt.  `validate_answer()` still receives the original full
+  `matches` list so API response citations carry complete metadata (scores,
+  filename, page) for the caller.  Test updated to assert the stripped payload.
+- **Files changed**: `src/faq_agent/llm/client.py`, `tests/test_basic_rag.py`
+
+---
+
 ## Critical fixes — production hardening (Critical #1 / #2 / #3)
 
 Three architectural issues in `supabase_store.py` were identified in the code

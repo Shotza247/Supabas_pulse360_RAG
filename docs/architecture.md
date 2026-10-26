@@ -34,9 +34,9 @@ sequenceDiagram
     A->>E: Embed question (per-connection VectorDumper — no shared state)
     A->>S: rag.match_document_chunks similarity search
     S-->>A: Chunks and vector scores
-    A->>L: Question and retrieved evidence
+    A->>L: Question + evidence stripped to {chunk_id, text, title, section}
     L-->>A: Answer and citation IDs
-    A-->>U: Validated answer or abstention
+    A-->>U: Validated answer with full citation metadata
 ```
 
 ## Data and configuration
@@ -64,10 +64,12 @@ LLM.
 The UI only lists application-managed collections. Omitting `collection_id` selects
 the configured default collection.
 
-Approval is required before embedding. The duplicate check (by `sha256`,
-`checksum`, or `content_hash`, in that order depending on which column is present
-in the live schema) runs before the embedding API is called — re-uploading a known
-document never incurs an embedding cost.
+Approval is required before embedding. The duplicate check tries `sha256` first,
+then `checksum`, then `content_hash` — stopping at the first column present in the
+live schema. This covers all three known schema variants. The check runs before the
+embedding API is called, and the INSERT supplies values for all three column names
+(the column filter keeps only the one that exists). Re-uploading a known document
+never incurs an embedding cost.
 
 On the Supabase path, previews are persisted in `rag.previews` and survive server
 restarts. Preview lookup filters on both `id` AND `collection_id` in a single SQL
@@ -80,6 +82,11 @@ The pgvector type adapter creates a fresh `Dumper` subclass per connection. The
 `oid` is captured as a class attribute on that per-connection subclass so concurrent
 connections never share mutable state.
 
+The LLM evidence payload is stripped to `{chunk_id, text, title, section}` before
+the API call. Internal IDs, similarity scores, filenames and page numbers are never
+sent to the third-party LLM — they remain server-side and are added back to the API
+response citations by `validate_answer()` after the LLM call returns.
+
 Only committed documents are searchable.
 
 ## Limitations and next steps
@@ -90,10 +97,14 @@ separately. The preview shows planned dimensions, not a computed vector.
 
 Similarity scores are not confidence estimates. Citation validation checks that
 IDs exist in the evidence; factual quality needs evaluation. There is no active
-reranking, conversational memory, Drive sync or monitoring stack. No per-IP rate
-limiting is in place — add `slowapi` before public deployment to protect the
-HuggingFace quota.
+reranking, conversational memory, Drive sync or monitoring stack.
 
-Next: evaluate real FAQs, then choose authentication, background jobs and
-monitoring. Consider injecting a shared `SupabaseLibrary` via FastAPI `Depends()`
-to eliminate per-request psycopg overhead under load.
+**Open items (tracked in code-review artifact):**
+- No per-IP rate limiting — add `slowapi` (`#13`) before public deployment to
+  protect the HuggingFace quota.
+- `SupabaseLibrary` is instantiated on every request in `retriever.py` — inject
+  via FastAPI `Depends()` (`#14`) to eliminate per-request psycopg overhead.
+- Section regex in chunker (`#9`) produces false positives on all-caps content,
+  degrading retrieval quality on real documents.
+- Sliding window in chunker (`#10`) can hang on documents with large overlap values.
+- `Settings.__post_init__` hard-crashes for any non-HuggingFace provider (`N3`).
