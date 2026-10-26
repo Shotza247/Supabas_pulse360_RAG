@@ -18,7 +18,7 @@ load_dotenv(PROJECT_ROOT / ".env")
 
 from faq_agent.config import get_settings  # noqa: E402
 from faq_agent.llm.client import synthesize  # noqa: E402
-from supabase_pgvector_test import (  # noqa: E402
+from faq_agent.db_helpers import (  # noqa: E402
     build_chunks,
     db_connection,
     insert_document,
