@@ -32,8 +32,9 @@ class Settings:
     chunk_overlap: int = 150
 
     def __post_init__(self):
-        if self.llm_provider != "huggingface":
-            raise ValueError("Only hosted Hugging Face synthesis is currently supported")
+        # llm_provider is validated at synthesis time (llm/client.py) so that
+        # config loading does not hard-crash when the provider is intentionally
+        # overridden for embedding-only or retrieval-only deployments (finding N3).
         if not 0 <= self.chunk_overlap < self.chunk_chars:
             raise ValueError("Require 0 <= CHUNK_OVERLAP < CHUNK_CHARS")
         if not 1 <= self.context_k <= 50:

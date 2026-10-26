@@ -1,7 +1,8 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from faq_agent.api.routes import create_app
+from faq_agent.api.routes import _RATE_LIMIT, _rate_counters, create_app
+from faq_agent.config import Settings
 
 
 def client(answerer=None):
@@ -73,3 +74,38 @@ def test_service_errors_documented():
         assert response["content"]["application/json"]["schema"]["$ref"].endswith(
             "/ServiceErrorResponse"
         )
+
+
+def test_rate_limit_returns_429():
+    """After _RATE_LIMIT requests from the same IP in one window, the next returns 429."""
+    _rate_counters.clear()
+    c = client()
+    # Issue _RATE_LIMIT successful requests
+    for _ in range(_RATE_LIMIT):
+        r = c.post("/ask", json={"question": "hello"})
+        assert r.status_code == 200
+    # The next one should be rate-limited
+    r = c.post("/ask", json={"question": "hello"})
+    assert r.status_code == 429
+
+
+def test_search_hit_has_no_score_field():
+    """SearchHit response must not contain a redundant 'score' alias (finding #16)."""
+    hit = {
+        "chunk_id": "demo",
+        "title": "Doc",
+        "section": "S",
+        "text": "content",
+        "vector_score": 0.75,
+    }
+    c = TestClient(create_app(searcher=lambda q: [hit]))
+    matches = c.post("/search", json={"question": "test?"}).json()["matches"]
+    assert len(matches) == 1
+    assert "score" not in matches[0]
+    assert matches[0]["vector_score"] == 0.75
+
+
+def test_non_huggingface_provider_settings_loads():
+    """Settings must not raise when llm_provider != 'huggingface' (finding N3)."""
+    s = Settings(llm_provider="openai")
+    assert s.llm_provider == "openai"
