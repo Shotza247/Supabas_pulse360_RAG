@@ -3,7 +3,13 @@ import re
 
 from faq_agent.schemas import Chunk, SourceDocument
 
-SECTION_RE = re.compile(r"^(#{1,3}\s+|[A-Z][A-Z0-9 &/.-]{3,}:?$)")
+# Matches markdown headings (# / ## / ###) or explicit ALLCAPS labels that end
+# with a colon (e.g. "RETURNS POLICY:").  The colon is required for the
+# non-markdown branch so that ordinary all-caps content — acronyms, table
+# headers, FAQ list items like "N/A" or "URL" — is NOT treated as a section
+# boundary.  Without the colon requirement the regex split chunk context
+# incorrectly on real documents, degrading retrieval quality (finding #9).
+SECTION_RE = re.compile(r"^(#{1,3}\s+|[A-Z][A-Z0-9 &/.-]{3,}:$)")
 
 
 def chunk_document(
@@ -67,8 +73,16 @@ def _split_sections(text: str) -> list[tuple[str, str]]:
 
 def _window_text(text: str, max_chars: int, overlap_chars: int) -> list[str]:
     # Prefer whitespace boundaries while enforcing a hard character limit.
+    #
+    # Fix #10: the original advance was max(start + 1, end - overlap_chars).
+    # When overlap_chars approaches max_chars, end - overlap_chars can equal
+    # start, so the window only moved forward 1 character per iteration,
+    # producing millions of near-duplicate chunks and hanging ingestion on large
+    # text sections.  The fix guarantees the window always advances by at least
+    # overlap_chars // 2 characters beyond the previous start position.
     windows = []
     start = 0
+    min_advance = max(1, overlap_chars // 2)
     while start < len(text):
         end = min(start + max_chars, len(text))
         if end < len(text):
@@ -83,5 +97,5 @@ def _window_text(text: str, max_chars: int, overlap_chars: int) -> list[str]:
             windows.append(chunk)
         if end == len(text):
             break
-        start = max(start + 1, end - overlap_chars)
+        start = max(start + min_advance, end - overlap_chars)
     return windows
