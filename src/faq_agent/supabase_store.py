@@ -516,7 +516,6 @@ class SupabaseLibrary:
                 "page": row["page_number"],
                 "document_id": str(row["document_id"]),
                 "vector_score": row["similarity"],
-                "score": row["similarity"],
                 "rerank_score": None,
             }
             for row in rows

@@ -10,7 +10,6 @@ def test_search_without_llm():
         "title": "Sample",
         "section": "Atlas",
         "text": "Atlas uses Python",
-        "score": 0.8,
         "vector_score": 0.8,
         "rerank_score": 0.9,
     }
