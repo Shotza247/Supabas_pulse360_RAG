@@ -1,8 +1,9 @@
 import logging
 import time
+from collections import defaultdict
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -66,12 +67,35 @@ class AskResponse(BaseModel):
 
 class SearchHit(ScoredCitation):
     text: str
-    score: float | None
 
 
 class SearchResponse(BaseModel):
     matches: list[SearchHit]
     request_id: str
+
+
+# ---------------------------------------------------------------------------
+# Simple fixed-window rate limiter (finding #13).
+#
+# No external dependency: a defaultdict tracks (ip, window_start) → count.
+# Window size: 60 s.  Limit: 30 requests per IP per window.
+# On overflow the request receives 429 before any embedding or DB work begins.
+# ---------------------------------------------------------------------------
+_RATE_LIMIT = 30          # max requests per window
+_RATE_WINDOW = 60         # seconds
+_rate_counters: dict[tuple[str, int], int] = defaultdict(int)
+
+
+def _check_rate_limit(request: Request) -> None:
+    ip = request.client.host if request.client else "unknown"
+    window = int(time.monotonic() // _RATE_WINDOW)
+    key = (ip, window)
+    _rate_counters[key] += 1
+    # Prune keys from previous windows to avoid unbounded growth.
+    for old_key in [k for k in _rate_counters if k[1] < window - 1]:
+        del _rate_counters[old_key]
+    if _rate_counters[key] > _RATE_LIMIT:
+        raise HTTPException(429, detail={"message": "Too many requests — please slow down.", "request_id": ""})
 
 
 def create_app(answerer=None, searcher=None):
@@ -100,8 +124,9 @@ def create_app(answerer=None, searcher=None):
             }
         },
     )
-    def search(body: AskRequest):
+    def search(body: AskRequest, request: Request):
         """Vector-only retrieval: source text and vector scores, with no reranking or LLM call."""
+        _check_rate_limit(request)
         request_id = str(uuid4())
         try:
             return {
@@ -132,8 +157,9 @@ def create_app(answerer=None, searcher=None):
             }
         },
     )
-    def ask(body: AskRequest):
+    def ask(body: AskRequest, request: Request):
         """Run the same vector search as /search, then synthesize a cited answer. No reranking."""
+        _check_rate_limit(request)
         # Blocking provider calls run in FastAPI's thread pool.
         request_id, started = str(uuid4()), time.monotonic()
         try:
