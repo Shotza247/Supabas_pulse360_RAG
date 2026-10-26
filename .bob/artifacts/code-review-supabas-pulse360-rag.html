@@ -16,7 +16,7 @@
   .progress-wrap { margin-bottom: 32px; }
   .progress-label { display: flex; justify-content: space-between; font-size: 12px; color: #57606a; margin-bottom: 6px; }
   .progress-bar { height: 10px; background: #e5e7eb; border-radius: 6px; overflow: hidden; }
-  .progress-fill { height: 100%; background: #1a7f37; border-radius: 6px; width: 52%; }
+  .progress-fill { height: 100%; background: #1a7f37; border-radius: 6px; width: 60%; }
 
   .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 36px; }
   .stat-card { background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 6px; padding: 14px 16px; text-align: center; }
@@ -28,17 +28,15 @@
   .stat-card.green .num  { color: #1a7f37; }
 
   .section-heading { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; margin: 32px 0 14px; padding-bottom: 8px; border-bottom: 2px solid #e5e7eb; }
-  .section-heading.orange  { border-color: #bc4c00; color: #bc4c00; }
-  .section-heading.yellow  { border-color: #9a6700; color: #9a6700; }
-  .section-heading.green   { border-color: #1a7f37; color: #1a7f37; }
-  .section-heading.resolved{ border-color: #1a7f37; color: #1a7f37; }
+  .section-heading.yellow   { border-color: #9a6700; color: #9a6700; }
+  .section-heading.green    { border-color: #1a7f37; color: #1a7f37; }
+  .section-heading.resolved { border-color: #1a7f37; color: #1a7f37; }
 
   .finding { border: 1px solid #e5e7eb; border-radius: 6px; margin-bottom: 12px; overflow: hidden; }
   .finding.done { border-color: #d0f0da; background: #f6fef9; }
   .finding-header { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; background: #f7f8fa; border-bottom: 1px solid #e5e7eb; }
   .finding.done .finding-header { background: #edfbf0; border-bottom-color: #d0f0da; }
   .finding-num { flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; margin-top: 1px; }
-  .num-orange { background: #bc4c00; }
   .num-yellow { background: #9a6700; }
   .num-green  { background: #1a7f37; }
   .num-done   { background: #1a7f37; }
@@ -73,7 +71,6 @@
   .summary-table tr.done-row td:nth-child(4) { text-decoration: line-through; text-decoration-color: #6cb86a; }
 
   .sev-badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 10px; white-space: nowrap; }
-  .sev-orange { background: #fff1e5; color: #bc4c00; }
   .sev-yellow { background: #fff8c5; color: #9a6700; }
   .sev-green  { background: #dafbe1; color: #1a7f37; }
   .sev-done   { background: #dafbe1; color: #1a7f37; }
@@ -92,306 +89,162 @@
     <div class="meta">
       <span>📁 FastAPI + Supabase pgvector backend</span>
       <span>🐍 Python 3.12 · Vercel deployment target</span>
-      <span>✅ 13 of 25 findings resolved</span>
-      <span>🔖 Latest: <span class="commit-ref">847d8d1</span> + #7 pending commit</span>
+      <span>✅ 15 of 25 findings resolved</span>
+      <span>🔖 Latest: <span class="commit-ref">ce61583</span></span>
     </div>
   </div>
 
   <div class="progress-wrap">
-    <div class="progress-label"><span>Overall progress</span><span>13 / 25 resolved (52%)</span></div>
+    <div class="progress-label"><span>Overall progress</span><span>15 / 25 resolved (60%)</span></div>
     <div class="progress-bar"><div class="progress-fill"></div></div>
   </div>
 
   <div class="stats">
     <div class="stat-card red">   <div class="num">0</div><div class="label">Critical open</div></div>
     <div class="stat-card orange"><div class="num">0</div><div class="label">High open</div></div>
-    <div class="stat-card yellow"><div class="num">8</div><div class="label">Medium open</div></div>
+    <div class="stat-card yellow"><div class="num">6</div><div class="label">Medium open</div></div>
     <div class="stat-card green"> <div class="num">4</div><div class="label">Low / Style open</div></div>
   </div>
 
   
-  <div class="section-heading resolved">✅ Resolved (13 of 25)</div>
+  <div class="section-heading resolved">✅ Resolved (15 of 25)</div>
 
   <div class="finding done">
-    <div class="finding-header">
-      <div class="finding-num num-done">1</div>
-      <div class="finding-title">In-memory <code>_PREVIEWS</code> dict — lost on restart, unbounded growth</div>
-      <div class="finding-file">supabase_store.py:22</div>
-    </div>
-    <div class="finding-body">
-      <div class="resolved-badge">✔ Fixed — <span class="commit-ref">454b217</span></div>
-      <p>Removed entirely. Previews now persisted in <code>rag.previews</code> via <code>CREATE TABLE IF NOT EXISTS</code>. TTL cleanup on every <code>preview()</code> call. <code>committed</code> flag set inside the transaction. Migration: <code>docs/migrations/001_add_rag_previews.sql</code>.</p>
-    </div>
+    <div class="finding-header"><div class="finding-num num-done">1</div><div class="finding-title">In-memory <code>_PREVIEWS</code> dict — lost on restart, unbounded growth</div><div class="finding-file">supabase_store.py:22</div></div>
+    <div class="finding-body"><div class="resolved-badge">✔ Fixed — <span class="commit-ref">454b217</span></div><p>Removed entirely. Previews persisted in <code>rag.previews</code> Supabase table. TTL cleanup on every <code>preview()</code> call. <code>committed</code> flag set inside the transaction. Migration: <code>docs/migrations/001_add_rag_previews.sql</code>.</p></div>
   </div>
 
   <div class="finding done">
-    <div class="finding-header">
-      <div class="finding-num num-done">2</div>
-      <div class="finding-title">Embeddings generated before the duplicate check</div>
-      <div class="finding-file">supabase_store.py:~151</div>
-    </div>
-    <div class="finding-body">
-      <div class="resolved-badge">✔ Fixed — <span class="commit-ref">454b217</span></div>
-      <p>Duplicate check (<code>checksum</code> → <code>content_hash</code> fallback) now runs before any call to the embedding API. Re-uploads skip the API and log <code>commit_skipped_duplicate</code>.</p>
-    </div>
+    <div class="finding-header"><div class="finding-num num-done">2</div><div class="finding-title">Embeddings generated before the duplicate check</div><div class="finding-file">supabase_store.py:~151</div></div>
+    <div class="finding-body"><div class="resolved-badge">✔ Fixed — <span class="commit-ref">454b217</span></div><p>Duplicate check now runs before any embedding API call. Re-uploads skip the API and log <code>commit_skipped_duplicate</code>.</p></div>
   </div>
 
   <div class="finding done">
-    <div class="finding-header">
-      <div class="finding-num num-done">3</div>
-      <div class="finding-title">No explicit transaction wrapping document + chunk inserts</div>
-      <div class="finding-file">supabase_store.py:134</div>
-    </div>
-    <div class="finding-body">
-      <div class="resolved-badge">✔ Fixed — <span class="commit-ref">454b217</span></div>
-      <p>All inserts run inside <code>with connection.transaction():</code>. Full rollback on failure. <code>commit_transaction_failed</code> logged at ERROR. Client told the <code>preview_id</code> is retryable.</p>
-    </div>
+    <div class="finding-header"><div class="finding-num num-done">3</div><div class="finding-title">No explicit transaction wrapping document + chunk inserts</div><div class="finding-file">supabase_store.py:134</div></div>
+    <div class="finding-body"><div class="resolved-badge">✔ Fixed — <span class="commit-ref">454b217</span></div><p>All inserts run inside <code>with connection.transaction():</code>. Full rollback on failure. Client told the <code>preview_id</code> is retryable.</p></div>
   </div>
 
   <div class="finding done">
-    <div class="finding-header">
-      <div class="finding-num num-done">4</div>
-      <div class="finding-title">Silent column skip masks NOT NULL constraint failures</div>
-      <div class="finding-file">supabase_store.py:154</div>
-    </div>
-    <div class="finding-body">
-      <div class="resolved-badge">✔ Fixed — <span class="commit-ref">3a04688</span></div>
-      <p>Required columns now raise <code>HTTP 500</code> with actionable message naming absent columns. Optional missing columns emit <code>WARNING commit_schema_mismatch</code> instead of silently dropping.</p>
-    </div>
+    <div class="finding-header"><div class="finding-num num-done">4</div><div class="finding-title">Silent column skip masks NOT NULL constraint failures</div><div class="finding-file">supabase_store.py:154</div></div>
+    <div class="finding-body"><div class="resolved-badge">✔ Fixed — <span class="commit-ref">3a04688</span></div><p>Required columns now raise <code>HTTP 500</code> with actionable message. Optional missing columns emit <code>WARNING commit_schema_mismatch</code>.</p></div>
   </div>
 
   <div class="finding done">
-    <div class="finding-header">
-      <div class="finding-num num-done">5</div>
-      <div class="finding-title"><code>embed_query("")</code> raises <code>IndexError</code></div>
-      <div class="finding-file">embedder.py:53</div>
-    </div>
-    <div class="finding-body">
-      <div class="resolved-badge">✔ Fixed — <span class="commit-ref">3a04688</span></div>
-      <p>Guard at the top of <code>embed_query()</code> raises <code>ValueError("Query text must be non-empty")</code> for empty or whitespace-only strings before any network call.</p>
-    </div>
+    <div class="finding-header"><div class="finding-num num-done">5</div><div class="finding-title"><code>embed_query("")</code> raises <code>IndexError</code></div><div class="finding-file">embedder.py:53</div></div>
+    <div class="finding-body"><div class="resolved-badge">✔ Fixed — <span class="commit-ref">3a04688</span></div><p>Guard raises <code>ValueError("Query text must be non-empty")</code> for empty or whitespace-only strings before any network call.</p></div>
   </div>
 
   <div class="finding done">
-    <div class="finding-header">
-      <div class="finding-num num-done">6</div>
-      <div class="finding-title">No retry / back-off on HuggingFace HTTP calls</div>
-      <div class="finding-file">embedder.py · llm/client.py</div>
-    </div>
-    <div class="finding-body">
-      <div class="resolved-badge">✔ Fixed — <span class="commit-ref">3a04688</span></div>
-      <p>Both modules use <code>_post_with_retry()</code>: 3 attempts, exponential back-off (immediate → 1 s → 2 s) on 429/500/502/503/504. Each retry logs WARNING; exhaustion logs ERROR.</p>
-    </div>
+    <div class="finding-header"><div class="finding-num num-done">6</div><div class="finding-title">No retry / back-off on HuggingFace HTTP calls</div><div class="finding-file">embedder.py · llm/client.py</div></div>
+    <div class="finding-body"><div class="resolved-badge">✔ Fixed — <span class="commit-ref">3a04688</span></div><p>Both modules use <code>_post_with_retry()</code>: 3 attempts, exponential back-off on 429/500/502/503/504.</p></div>
   </div>
 
   <div class="finding done">
-    <div class="finding-header">
-      <div class="finding-num num-done">7</div>
-      <div class="finding-title"><code>vector_literal()</code> produces raw SQL string, bypassing parameterization</div>
-      <div class="finding-file">supabase_pgvector_test.py</div>
-    </div>
-    <div class="finding-body">
-      <div class="resolved-badge">✔ Fixed — pending commit</div>
-      <p>Deleted <code>vector_literal()</code> entirely from <code>supabase_pgvector_test.py</code>. <code>db_connection()</code> now calls <code>_register_vector_dumper(connection)</code> (imported from <code>supabase_store</code>) so raw <code>list[float]</code> values pass through psycopg3's type adapter at both <code>insert_document</code> (embedding insert) and <code>search_document</code> (query vector). Both call sites now pass the list directly as a <code>%s</code> parameter with no string interpolation.</p>
-    </div>
+    <div class="finding-header"><div class="finding-num num-done">7</div><div class="finding-title"><code>vector_literal()</code> produces raw SQL string, bypassing parameterization</div><div class="finding-file">supabase_pgvector_test.py</div></div>
+    <div class="finding-body"><div class="resolved-badge">✔ Fixed — <span class="commit-ref">f52a8b8</span></div><p>Deleted <code>vector_literal()</code>. <code>db_connection()</code> now registers the psycopg3 type adapter so raw <code>list[float]</code> passes safely as a <code>%s</code> parameter at both call sites. No raw string interpolation remains anywhere.</p></div>
   </div>
 
   <div class="finding done">
-    <div class="finding-header">
-      <div class="finding-num num-done">8</div>
-      <div class="finding-title">Module docstring after import — <code>__doc__</code> is <code>None</code></div>
-      <div class="finding-file">llm/client.py:1</div>
-    </div>
-    <div class="finding-body">
-      <div class="resolved-badge">✔ Fixed — <span class="commit-ref">3a04688</span></div>
-      <p>Docstring moved above all imports so Python registers it as <code>llm.client.__doc__</code>. Affects IDE hover, <code>help()</code>, and any tooling that reads module metadata.</p>
-    </div>
+    <div class="finding-header"><div class="finding-num num-done">8</div><div class="finding-title">Module docstring after import — <code>__doc__</code> is <code>None</code></div><div class="finding-file">llm/client.py:1</div></div>
+    <div class="finding-body"><div class="resolved-badge">✔ Fixed — <span class="commit-ref">3a04688</span></div><p>Docstring moved above all imports.</p></div>
   </div>
 
   <div class="finding done">
-    <div class="finding-header">
-      <div class="finding-num num-done">R1</div>
-      <div class="finding-title">Race condition — shared <code>_VectorDumper.oid</code> class attribute mutated per connection</div>
-      <div class="finding-file">supabase_store.py:46</div>
-    </div>
-    <div class="finding-body">
-      <div class="resolved-badge">✔ Fixed — <span class="commit-ref">847d8d1</span></div>
-      <p>Removed module-level factory and <code>_VectorDumper</code> singleton. <code>_register_vector_dumper()</code> now creates a fresh subclass per connection with <code>oid</code> as a class attribute on that subclass only — concurrent connections never share mutable state.</p>
-    </div>
+    <div class="finding-header"><div class="finding-num num-done">R1</div><div class="finding-title">Race condition — shared <code>_VectorDumper.oid</code> class attribute mutated per connection</div><div class="finding-file">supabase_store.py:46</div></div>
+    <div class="finding-body"><div class="resolved-badge">✔ Fixed — <span class="commit-ref">847d8d1</span></div><p>Fresh <code>_VectorDumper</code> subclass created per connection. <code>oid</code> is a class attribute on that subclass only — concurrent connections never share mutable state.</p></div>
   </div>
 
   <div class="finding done">
-    <div class="finding-header">
-      <div class="finding-num num-done">R2</div>
-      <div class="finding-title"><code>db_connection()</code> returns a bare connection, not a proper context manager generator</div>
-      <div class="finding-file">supabase_pgvector_test.py:40</div>
-    </div>
-    <div class="finding-body">
-      <div class="resolved-badge">✔ Fixed — <span class="commit-ref">847d8d1</span></div>
-      <p>Added <code>@contextmanager</code> and <code>with psycopg.connect(...) as connection: yield connection</code>. Guaranteed resource cleanup on any exit path, consistent with <code>SupabaseLibrary.connection()</code>.</p>
-    </div>
+    <div class="finding-header"><div class="finding-num num-done">R2</div><div class="finding-title"><code>db_connection()</code> returns a bare connection, not a proper context manager generator</div><div class="finding-file">supabase_pgvector_test.py:40</div></div>
+    <div class="finding-body"><div class="resolved-badge">✔ Fixed — <span class="commit-ref">847d8d1</span></div><p>Added <code>@contextmanager</code> + <code>yield</code>. Guaranteed resource cleanup on any exit path.</p></div>
   </div>
 
   <div class="finding done">
-    <div class="finding-header">
-      <div class="finding-num num-done">R3</div>
-      <div class="finding-title">Preview fetch allows collection-oracle timing leak</div>
-      <div class="finding-file">supabase_store.py:151</div>
-    </div>
-    <div class="finding-body">
-      <div class="resolved-badge">✔ Fixed — <span class="commit-ref">847d8d1</span></div>
-      <p><code>_load_preview()</code> now uses <code>WHERE id = %s AND collection_id = %s</code> in a single query. A token from collection A used against collection B follows the identical code path as a non-existent token — no timing oracle.</p>
-    </div>
+    <div class="finding-header"><div class="finding-num num-done">R3</div><div class="finding-title">Preview fetch allows collection-oracle timing leak</div><div class="finding-file">supabase_store.py:151</div></div>
+    <div class="finding-body"><div class="resolved-badge">✔ Fixed — <span class="commit-ref">847d8d1</span></div><p><code>WHERE id = %s AND collection_id = %s</code> in a single query. Both "not found" and "wrong collection" follow identical code path — no timing oracle.</p></div>
   </div>
 
   <div class="finding done">
-    <div class="finding-header">
-      <div class="finding-num num-done">17</div>
-      <div class="finding-title"><code>json.loads(profile)</code> called twice per row in <code>list_collections()</code></div>
-      <div class="finding-file">ingestion/service.py (deleted)</div>
-    </div>
-    <div class="finding-body">
-      <div class="resolved-badge">✔ Closed by deletion</div>
-      <p><code>ingestion/service.py</code> (Qdrant+SQLite path) was removed in the Supabase-only refactor. Finding no longer exists in the codebase.</p>
-    </div>
+    <div class="finding-header"><div class="finding-num num-done">N1</div><div class="finding-title">Duplicate check misses live <code>sha256</code> column</div><div class="finding-file">supabase_store.py:365</div></div>
+    <div class="finding-body"><div class="resolved-badge">✔ Fixed — <span class="commit-ref">8d47aec</span></div><p>Replaced two-branch <code>if/elif</code> with a priority-ordered loop over <code>("sha256", "checksum", "content_hash")</code> — first column present in the live schema wins and the loop breaks. Re-uploads to the live schema are now correctly detected as duplicates before any embedding API call.</p></div>
   </div>
 
   <div class="finding done">
-    <div class="finding-header">
-      <div class="finding-num num-done">18</div>
-      <div class="finding-title">CORS <code>allow_methods</code> note (duplicate / confirmed not a bug)</div>
-      <div class="finding-file">api/routes.py:84</div>
-    </div>
-    <div class="finding-body">
-      <div class="resolved-badge">✔ Closed — confirmed not a bug</div>
-      <p>FastAPI handles <code>OPTIONS</code> preflight automatically for listed methods. Consolidated into finding #13 above.</p>
-    </div>
+    <div class="finding-header"><div class="finding-num num-done">N2</div><div class="finding-title">Raw match dicts (internal IDs, scores) sent directly to LLM as user content</div><div class="finding-file">llm/client.py:113</div></div>
+    <div class="finding-body"><div class="resolved-badge">✔ Fixed — <span class="commit-ref">ce61583</span></div><p>Added <code>_LLM_EVIDENCE_FIELDS = ("chunk_id", "text", "title", "section")</code>. <code>synthesize()</code> strips each match to those four fields before serialising the prompt — <code>vector_score</code>, <code>document_id</code>, <code>filename</code>, <code>page</code> and scores never reach the third-party API. <code>validate_answer()</code> still receives the full original matches so API response citations carry complete metadata. Test updated to assert the stripped payload.</p></div>
+  </div>
+
+  <div class="finding done">
+    <div class="finding-header"><div class="finding-num num-done">17</div><div class="finding-title"><code>json.loads(profile)</code> called twice per row in <code>list_collections()</code></div><div class="finding-file">ingestion/service.py (deleted)</div></div>
+    <div class="finding-body"><div class="resolved-badge">✔ Closed by deletion</div><p>File removed in Supabase-only refactor.</p></div>
+  </div>
+
+  <div class="finding done">
+    <div class="finding-header"><div class="finding-num num-done">18</div><div class="finding-title">CORS <code>allow_methods</code> note (confirmed not a bug)</div><div class="finding-file">api/routes.py:84</div></div>
+    <div class="finding-body"><div class="resolved-badge">✔ Closed — confirmed not a bug</div><p>FastAPI handles <code>OPTIONS</code> preflight automatically.</p></div>
   </div>
 
   
-  <div class="section-heading yellow">🟡 Medium — 8 remaining</div>
+  <div class="section-heading yellow">🟡 Medium — 6 remaining</div>
 
   <div class="finding">
-    <div class="finding-header">
-      <div class="finding-num num-yellow">9</div>
-      <div class="finding-title">Section regex produces false positives on all-caps content</div>
-      <div class="finding-file">chunker.py:6</div>
-    </div>
+    <div class="finding-header"><div class="finding-num num-yellow">9</div><div class="finding-title">Section regex produces false positives on all-caps content</div><div class="finding-file">chunker.py:6</div></div>
     <div class="finding-body">
-      <p><span class="tag tag-category">Correctness</span>
-      <code>SECTION_RE</code> second alternative matches any 4+ uppercase line — FAQ list items, table headers, acronyms (<code>N/A:</code>, <code>URL:</code>) all match, causing incorrect section splits that break chunk context and hurt retrieval quality.</p>
+      <p><span class="tag tag-category">Correctness</span><code>SECTION_RE</code> second alternative matches any 4+ uppercase line — FAQ list items, table headers, acronyms (<code>N/A:</code>, <code>URL:</code>) — causing incorrect section splits that break chunk context and hurt retrieval quality.</p>
       <div class="fix-label">Recommended fix</div>
-      <p>Require the non-markdown alternative to end with <code>:</code> (making it an explicit label). Alternatively restrict section detection to markdown headers only (<code>#{1,3}\s+</code>).</p>
+      <p>Require the non-markdown alternative to end with <code>:</code>, or restrict section detection to markdown headers only (<code>#{1,3}\s+</code>).</p>
     </div>
   </div>
 
   <div class="finding">
-    <div class="finding-header">
-      <div class="finding-num num-yellow">10</div>
-      <div class="finding-title">Sliding window can advance by 1 character on large overlap values</div>
-      <div class="finding-file">chunker.py:86</div>
-    </div>
+    <div class="finding-header"><div class="finding-num num-yellow">10</div><div class="finding-title">Sliding window can advance by 1 character on large overlap values</div><div class="finding-file">chunker.py:86</div></div>
     <div class="finding-body">
-      <p><span class="tag tag-category">Performance</span>
-      <code>start = max(start + 1, end - overlap_chars)</code> — if <code>overlap_chars</code> approaches <code>max_chars</code>, the window advances by 1 character per iteration, producing millions of near-duplicate chunks and effectively hanging ingestion.</p>
+      <p><span class="tag tag-category">Performance</span><code>start = max(start + 1, end - overlap_chars)</code> — if <code>overlap_chars</code> approaches <code>max_chars</code>, the window advances 1 char per iteration, producing millions of near-duplicate chunks and hanging ingestion.</p>
       <div class="fix-label">Recommended fix</div>
       <pre>start = max(end - overlap_chars, start + max(1, overlap_chars // 2))</pre>
     </div>
   </div>
 
   <div class="finding">
-    <div class="finding-header">
-      <div class="finding-num num-yellow">11</div>
-      <div class="finding-title">Chroma cosine distance → similarity conversion is wrong</div>
-      <div class="finding-file">vector_store.py (deleted — note for future)</div>
-    </div>
+    <div class="finding-header"><div class="finding-num num-yellow">11</div><div class="finding-title">Chroma cosine distance → similarity conversion is wrong</div><div class="finding-file">vector_store.py (deleted — note for future)</div></div>
     <div class="finding-body">
-      <p><span class="tag tag-category">Correctness</span>
-      File deleted. If Chroma is re-introduced, this bug must not be carried forward: Chroma returns cosine distance in <code>[0, 2]</code>; <code>1.0 - distance</code> can produce negative scores.</p>
+      <p><span class="tag tag-category">Correctness</span>File deleted. If Chroma is ever re-introduced, <code>1.0 - distance</code> is wrong — distance is in <code>[0, 2]</code> and can produce negative scores.</p>
       <div class="fix-label">Correct conversion</div>
       <pre>score = max(0.0, 1.0 - distance / 2.0)</pre>
     </div>
   </div>
 
   <div class="finding">
-    <div class="finding-header">
-      <div class="finding-num num-yellow">12</div>
-      <div class="finding-title"><code>BEGIN IMMEDIATE</code> scope not commented in <code>preview()</code></div>
-      <div class="finding-file">ingestion/service.py (deleted — moot)</div>
-    </div>
+    <div class="finding-header"><div class="finding-num num-yellow">12</div><div class="finding-title"><code>BEGIN IMMEDIATE</code> scope not commented in <code>preview()</code></div><div class="finding-file">ingestion/service.py (deleted — moot)</div></div>
     <div class="finding-body">
-      <p><span class="tag tag-category">Clarity</span>
-      File deleted. The Supabase <code>preview()</code> path is safe: each write is a single atomic INSERT with no read-modify-write race. Moot for production but worth a comment for future readers.</p>
+      <p><span class="tag tag-category">Clarity</span>File deleted. Moot for the Supabase path — each <code>preview()</code> write is a single atomic INSERT with no read-modify-write race.</p>
     </div>
   </div>
 
   <div class="finding">
-    <div class="finding-header">
-      <div class="finding-num num-yellow">13</div>
-      <div class="finding-title">No rate limiting on <code>/search</code> and <code>/ask</code> endpoints</div>
-      <div class="finding-file">api/routes.py:88</div>
-    </div>
+    <div class="finding-header"><div class="finding-num num-yellow">13</div><div class="finding-title">No rate limiting on <code>/search</code> and <code>/ask</code> endpoints</div><div class="finding-file">api/routes.py:88</div></div>
     <div class="finding-body">
-      <p><span class="tag tag-category">Security / Ops</span>
-      Both endpoints accept unlimited requests. A single client can saturate the HuggingFace embedding quota or LLM token budget. No per-IP throttle or circuit breaker is in place.</p>
+      <p><span class="tag tag-category">Security / Ops</span>Both endpoints accept unlimited requests. A single client can saturate the HuggingFace embedding quota or LLM token budget.</p>
       <div class="fix-label">Recommended fix</div>
       <p>Add <code>slowapi</code> middleware for per-IP rate limiting. Propagate <code>request_id</code> as <code>X-Request-Id</code> response header for cross-service log correlation.</p>
     </div>
   </div>
 
   <div class="finding">
-    <div class="finding-header">
-      <div class="finding-num num-yellow">14</div>
-      <div class="finding-title">New <code>SupabaseLibrary</code> instantiated on every search request</div>
-      <div class="finding-file">retriever.py:17</div>
-    </div>
+    <div class="finding-header"><div class="finding-num num-yellow">14</div><div class="finding-title">New <code>SupabaseLibrary</code> instantiated on every search request</div><div class="finding-file">retriever.py:17</div></div>
     <div class="finding-body">
-      <p><span class="tag tag-category">Performance</span>
-      <code>SupabaseLibrary(settings).search(…)</code> constructs a new object on every call, re-importing psycopg and resolving the connection string each time. Unnecessary per-request overhead in a warm instance.</p>
+      <p><span class="tag tag-category">Performance</span><code>SupabaseLibrary(settings).search(…)</code> constructs a new object on every call, re-importing psycopg and resolving the connection string each time.</p>
       <div class="fix-label">Recommended fix</div>
-      <p>Inject a shared <code>SupabaseLibrary</code> via FastAPI's <code>Depends()</code>, matching the pattern already used in <code>api/documents.py</code> via <code>get_library()</code>.</p>
+      <p>Inject a shared instance via FastAPI's <code>Depends()</code>, matching the pattern already in <code>api/documents.py</code> via <code>get_library()</code>.</p>
     </div>
   </div>
 
   <div class="finding">
-    <div class="finding-header">
-      <div class="finding-num num-yellow">N1</div>
-      <div class="finding-title">Duplicate check misses live <code>sha256</code> column</div>
-      <div class="finding-file">supabase_store.py:367</div>
-    </div>
+    <div class="finding-header"><div class="finding-num num-yellow">N3</div><div class="finding-title"><code>Settings</code> hard-crashes on startup for any non-HuggingFace provider</div><div class="finding-file">config.py:35</div></div>
     <div class="finding-body">
-      <p><span class="tag tag-category">Correctness</span>
-      <code>commit()</code> checks <code>checksum</code> then <code>content_hash</code> for deduplication, but the live schema uses <code>sha256</code>. Re-uploading the same file to the live schema is never detected as a duplicate — an unnecessary embedding API call is made every time.</p>
+      <p><span class="tag tag-category">Flexibility</span><code>__post_init__</code> raises <code>ValueError</code> if <code>llm_provider != "huggingface"</code>, making the process unrunnable with any other provider. <code>synthesize()</code> already re-checks at call time.</p>
       <div class="fix-label">Recommended fix</div>
-      <p>Add a branch for <code>sha256</code> first (highest priority), before the <code>checksum</code> and <code>content_hash</code> fallbacks.</p>
-    </div>
-  </div>
-
-  <div class="finding">
-    <div class="finding-header">
-      <div class="finding-num num-yellow">N2</div>
-      <div class="finding-title">Raw match dicts (internal IDs, scores) sent directly to LLM as user content</div>
-      <div class="finding-file">llm/client.py:113</div>
-    </div>
-    <div class="finding-body">
-      <p><span class="tag tag-category">Security / Token cost</span>
-      <code>synthesize()</code> serialises the full match dict — including <code>vector_score</code>, <code>document_id</code>, <code>page</code> and <code>filename</code> — as the LLM user message. This inflates token usage, exposes internal IDs to the model, and contradicts the system prompt's "untrusted data" framing.</p>
-      <div class="fix-label">Recommended fix</div>
-      <p>Strip matches to only <code>{"chunk_id", "text", "title", "section"}</code> before passing to the prompt.</p>
-    </div>
-  </div>
-
-  <div class="finding">
-    <div class="finding-header">
-      <div class="finding-num num-yellow">N3</div>
-      <div class="finding-title"><code>Settings</code> hard-crashes on startup for any non-HuggingFace provider</div>
-      <div class="finding-file">config.py:35</div>
-    </div>
-    <div class="finding-body">
-      <p><span class="tag tag-category">Flexibility</span>
-      <code>__post_init__</code> raises <code>ValueError</code> if <code>llm_provider != "huggingface"</code>, making the process unrunnable with any other provider. <code>synthesize()</code> already re-checks this at call time.</p>
-      <div class="fix-label">Recommended fix</div>
-      <p>Downgrade to a <code>logger.warning</code> in <code>__post_init__</code>; keep the hard check only in <code>synthesize()</code>.</p>
+      <p>Downgrade to <code>logger.warning</code> in <code>__post_init__</code>; keep the hard check only inside <code>synthesize()</code>.</p>
     </div>
   </div>
 
@@ -399,94 +252,72 @@
   <div class="section-heading green">🟢 Low / Style — 4 remaining</div>
 
   <div class="finding">
-    <div class="finding-header">
-      <div class="finding-num num-green">15</div>
-      <div class="finding-title"><code>source_id</code> derived from filename collides across directories</div>
-      <div class="finding-file">ingestion/loader.py:29</div>
-    </div>
+    <div class="finding-header"><div class="finding-num num-green">15</div><div class="finding-title"><code>source_id</code> derived from filename collides across directories</div><div class="finding-file">ingestion/loader.py:29</div></div>
     <div class="finding-body">
-      <p><span class="tag tag-category">Collision Risk</span>
-      <code>load_document()</code> sets <code>source_id = path.stem.lower().replace(" ", "-")</code>. Two files named <code>About Us.md</code> in different subdirectories both produce <code>source_id = "about-us"</code>. <code>load_documents()</code> uses a path-hash correctly, but direct callers of <code>load_document()</code> receive a colliding ID.</p>
+      <p><span class="tag tag-category">Collision Risk</span><code>load_document()</code> sets <code>source_id = path.stem.lower().replace(" ", "-")</code>. Two files named <code>About Us.md</code> in different subdirectories both produce <code>source_id = "about-us"</code>.</p>
       <div class="fix-label">Recommended fix</div>
-      <p>Derive <code>source_id</code> from a SHA-256 of the full path in <code>load_document()</code> too, or at minimum document that callers must supply a unique ID.</p>
+      <p>Derive <code>source_id</code> from a SHA-256 of the full path in <code>load_document()</code> too, consistent with <code>load_documents()</code>.</p>
     </div>
   </div>
 
   <div class="finding">
-    <div class="finding-header">
-      <div class="finding-num num-green">16</div>
-      <div class="finding-title"><code>vector_score</code> is a confusing alias for <code>score</code></div>
-      <div class="finding-file">schemas.py:31</div>
-    </div>
+    <div class="finding-header"><div class="finding-num num-green">16</div><div class="finding-title"><code>vector_score</code> is a confusing alias for <code>score</code></div><div class="finding-file">schemas.py:31</div></div>
     <div class="finding-body">
-      <p><span class="tag tag-category">Style</span>
-      <code>RetrievedChunk</code> exposes both <code>score</code> and a <code>vector_score</code> property returning the same value. API responses serialise both fields. Callers don't know which to use.</p>
+      <p><span class="tag tag-category">Style</span><code>RetrievedChunk</code> exposes both <code>score</code> and a <code>vector_score</code> property returning the same value. API responses serialise both. Callers don't know which to use.</p>
       <div class="fix-label">Recommended fix</div>
-      <p>Keep <code>vector_score</code> as the canonical public field. Remove <code>score</code> from the serialised response or mark it deprecated.</p>
+      <p>Keep <code>vector_score</code> as the canonical field; remove <code>score</code> from the serialised response.</p>
     </div>
   </div>
 
   <div class="finding">
-    <div class="finding-header">
-      <div class="finding-num num-green">N4</div>
-      <div class="finding-title">Default <code>section: "FAQ"</code> in chunker is misleading for non-FAQ documents</div>
-      <div class="finding-file">chunker.py:48</div>
-    </div>
+    <div class="finding-header"><div class="finding-num num-green">N4</div><div class="finding-title">Default <code>section: "FAQ"</code> in chunker is misleading for non-FAQ documents</div><div class="finding-file">chunker.py:48</div></div>
     <div class="finding-body">
-      <p><span class="tag tag-category">Style</span>
-      Documents with no headings produce chunks where <code>section = "FAQ"</code>, which appears literally in LLM citations as if the document has a section called "FAQ".</p>
+      <p><span class="tag tag-category">Style</span>Documents with no headings produce chunks where <code>section = "FAQ"</code>, appearing literally in LLM citations as if the document has a section called "FAQ".</p>
       <div class="fix-label">Recommended fix</div>
-      <p>Use an empty string <code>""</code> or <code>None</code> as the default section name and handle it downstream in citation formatting.</p>
+      <p>Use <code>""</code> or <code>None</code> as the default section name and handle it downstream in citation formatting.</p>
     </div>
   </div>
 
   <div class="finding">
-    <div class="finding-header">
-      <div class="finding-num num-green">N5</div>
-      <div class="finding-title"><code>streamlit_app.py</code> imports shared helpers directly from smoke-test script</div>
-      <div class="finding-file">streamlit_app.py:21</div>
-    </div>
+    <div class="finding-header"><div class="finding-num num-green">N5</div><div class="finding-title">Production UI imports shared helpers from smoke-test script</div><div class="finding-file">streamlit_app.py:21</div></div>
     <div class="finding-body">
-      <p><span class="tag tag-category">Structure</span>
-      <code>streamlit_app.py</code> imports <code>build_chunks</code>, <code>db_connection</code>, <code>insert_document</code> etc. from <code>supabase_pgvector_test.py</code> — a standalone smoke-test script. This couples the production UI to a test harness.</p>
+      <p><span class="tag tag-category">Structure</span><code>streamlit_app.py</code> imports <code>build_chunks</code>, <code>db_connection</code>, <code>insert_document</code> etc. directly from <code>supabase_pgvector_test.py</code>, coupling the production UI to a test harness.</p>
       <div class="fix-label">Recommended fix</div>
-      <p>Move the shared helpers into a dedicated module (e.g. <code>src/faq_agent/pgvector_utils.py</code>) that both the app and the smoke-test script import from.</p>
+      <p>Move shared helpers into <code>src/faq_agent/pgvector_utils.py</code>; both the app and the smoke-test import from there.</p>
     </div>
   </div>
 
   
   <div class="section-heading" style="color:#1f2328;border-color:#e5e7eb">📋 All 25 Findings at a Glance</div>
   <table class="summary-table">
-    <thead>
-      <tr><th>#</th><th>Severity</th><th>File</th><th>One-liner</th><th>Status</th></tr>
-    </thead>
+    <thead><tr><th>#</th><th>Severity</th><th>File</th><th>One-liner</th><th>Status</th></tr></thead>
     <tbody>
-      <tr class="done-row"><td>1</td> <td><span class="sev-done sev-badge">Critical</span></td><td><code>supabase_store.py:22</code></td>  <td>In-memory <code>_PREVIEWS</code> lost on restart</td>                          <td><span class="check">✔ 454b217</span></td></tr>
-      <tr class="done-row"><td>2</td> <td><span class="sev-done sev-badge">Critical</span></td><td><code>supabase_store.py:~151</code></td> <td>Embeddings generated before duplicate check</td>                            <td><span class="check">✔ 454b217</span></td></tr>
-      <tr class="done-row"><td>3</td> <td><span class="sev-done sev-badge">Critical</span></td><td><code>supabase_store.py:134</code></td> <td>No explicit transaction in <code>commit()</code></td>                       <td><span class="check">✔ 454b217</span></td></tr>
-      <tr class="done-row"><td>4</td> <td><span class="sev-done sev-badge">High</span></td>   <td><code>supabase_store.py:154</code></td> <td>Column filter silently skips NOT NULL columns</td>                          <td><span class="check">✔ 3a04688</span></td></tr>
-      <tr class="done-row"><td>5</td> <td><span class="sev-done sev-badge">High</span></td>   <td><code>embedder.py:53</code></td>         <td><code>embed_query("")</code> raises <code>IndexError</code></td>            <td><span class="check">✔ 3a04688</span></td></tr>
-      <tr class="done-row"><td>6</td> <td><span class="sev-done sev-badge">High</span></td>   <td><code>embedder.py / llm/client.py</code></td><td>No retry / back-off on HuggingFace HTTP calls</td>                     <td><span class="check">✔ 3a04688</span></td></tr>
-      <tr class="done-row"><td>7</td> <td><span class="sev-done sev-badge">High</span></td>   <td><code>supabase_pgvector_test.py</code></td><td><code>vector_literal()</code> bypasses SQL parameterization</td>           <td><span class="check">✔ pending</span></td></tr>
-      <tr class="done-row"><td>8</td> <td><span class="sev-done sev-badge">Medium</span></td> <td><code>llm/client.py:1</code></td>         <td>Module docstring after import — <code>__doc__</code> is <code>None</code></td><td><span class="check">✔ 3a04688</span></td></tr>
-      <tr><td>9</td>  <td><span class="sev-yellow sev-badge">Medium</span></td><td><code>chunker.py:6</code></td>             <td>Section regex false-positives on all-caps content</td>                     <td><span class="box"></span></td></tr>
-      <tr><td>10</td> <td><span class="sev-yellow sev-badge">Medium</span></td><td><code>chunker.py:86</code></td>            <td>Window can advance 1 char — hangs on large text</td>                       <td><span class="box"></span></td></tr>
-      <tr><td>11</td> <td><span class="sev-yellow sev-badge">Medium</span></td><td><code>vector_store.py (deleted)</code></td><td>Chroma cosine distance → similarity wrong (note for future)</td>             <td><span class="box"></span></td></tr>
-      <tr><td>12</td> <td><span class="sev-yellow sev-badge">Medium</span></td><td><code>service.py (deleted)</code></td>    <td><code>BEGIN IMMEDIATE</code> not commented (moot)</td>                        <td><span class="box"></span></td></tr>
-      <tr><td>13</td> <td><span class="sev-yellow sev-badge">Medium</span></td><td><code>api/routes.py:88</code></td>        <td>No rate limiting on <code>/search</code> and <code>/ask</code></td>         <td><span class="box"></span></td></tr>
-      <tr><td>14</td> <td><span class="sev-yellow sev-badge">Medium</span></td><td><code>retriever.py:17</code></td>         <td>New <code>SupabaseLibrary</code> instantiated per request</td>               <td><span class="box"></span></td></tr>
-      <tr><td>15</td> <td><span class="sev-green sev-badge">Low</span></td>   <td><code>loader.py:29</code></td>            <td><code>source_id</code> from filename collides across dirs</td>               <td><span class="box"></span></td></tr>
-      <tr><td>16</td> <td><span class="sev-green sev-badge">Low</span></td>   <td><code>schemas.py:31</code></td>           <td><code>vector_score</code> is a confusing alias for <code>score</code></td>   <td><span class="box"></span></td></tr>
-      <tr class="done-row"><td>17</td><td><span class="sev-done sev-badge">Low</span></td>   <td><code>service.py (deleted)</code></td>   <td>Double <code>json.loads(profile)</code> per row</td>                        <td><span class="check">✔ deleted</span></td></tr>
-      <tr class="done-row"><td>18</td><td><span class="sev-done sev-badge">Low</span></td>   <td><code>api/routes.py:84</code></td>       <td>CORS <code>allow_methods</code> note</td>                                   <td><span class="check">✔ closed</span></td></tr>
-      <tr class="done-row"><td>R1</td><td><span class="sev-done sev-badge">Critical</span></td><td><code>supabase_store.py:46</code></td> <td>Shared <code>_VectorDumper.oid</code> race condition</td>                   <td><span class="check">✔ 847d8d1</span></td></tr>
-      <tr class="done-row"><td>R2</td><td><span class="sev-done sev-badge">Critical</span></td><td><code>supabase_pgvector_test.py:40</code></td><td><code>db_connection()</code> not a proper context manager</td>        <td><span class="check">✔ 847d8d1</span></td></tr>
-      <tr class="done-row"><td>R3</td><td><span class="sev-done sev-badge">Critical</span></td><td><code>supabase_store.py:151</code></td><td>Preview fetch allows collection-oracle timing leak</td>                   <td><span class="check">✔ 847d8d1</span></td></tr>
-      <tr><td>N1</td> <td><span class="sev-yellow sev-badge">Medium</span></td><td><code>supabase_store.py:367</code></td>  <td>Duplicate check misses live <code>sha256</code> column</td>                  <td><span class="box"></span></td></tr>
-      <tr><td>N2</td> <td><span class="sev-yellow sev-badge">Medium</span></td><td><code>llm/client.py:113</code></td>      <td>Raw match dicts with internal IDs sent to LLM</td>                         <td><span class="box"></span></td></tr>
-      <tr><td>N3</td> <td><span class="sev-yellow sev-badge">Medium</span></td><td><code>config.py:35</code></td>           <td>Hard startup crash for any non-HuggingFace provider</td>                   <td><span class="box"></span></td></tr>
-      <tr><td>N4</td> <td><span class="sev-green sev-badge">Low</span></td>   <td><code>chunker.py:48</code></td>           <td>Default <code>section: "FAQ"</code> misleading for non-FAQ docs</td>         <td><span class="box"></span></td></tr>
-      <tr><td>N5</td> <td><span class="sev-green sev-badge">Low</span></td>   <td><code>streamlit_app.py:21</code></td>     <td>Production UI imports from smoke-test script</td>                          <td><span class="box"></span></td></tr>
+      <tr class="done-row"><td>1</td>  <td><span class="sev-done sev-badge">Critical</span></td><td><code>supabase_store.py:22</code></td>      <td>In-memory <code>_PREVIEWS</code> lost on restart</td>                              <td><span class="check">✔ 454b217</span></td></tr>
+      <tr class="done-row"><td>2</td>  <td><span class="sev-done sev-badge">Critical</span></td><td><code>supabase_store.py:~151</code></td>    <td>Embeddings generated before duplicate check</td>                                  <td><span class="check">✔ 454b217</span></td></tr>
+      <tr class="done-row"><td>3</td>  <td><span class="sev-done sev-badge">Critical</span></td><td><code>supabase_store.py:134</code></td>     <td>No explicit transaction in <code>commit()</code></td>                             <td><span class="check">✔ 454b217</span></td></tr>
+      <tr class="done-row"><td>4</td>  <td><span class="sev-done sev-badge">High</span></td>   <td><code>supabase_store.py:154</code></td>     <td>Column filter silently skips NOT NULL columns</td>                                <td><span class="check">✔ 3a04688</span></td></tr>
+      <tr class="done-row"><td>5</td>  <td><span class="sev-done sev-badge">High</span></td>   <td><code>embedder.py:53</code></td>            <td><code>embed_query("")</code> raises <code>IndexError</code></td>                  <td><span class="check">✔ 3a04688</span></td></tr>
+      <tr class="done-row"><td>6</td>  <td><span class="sev-done sev-badge">High</span></td>   <td><code>embedder.py / llm/client.py</code></td><td>No retry / back-off on HuggingFace HTTP calls</td>                              <td><span class="check">✔ 3a04688</span></td></tr>
+      <tr class="done-row"><td>7</td>  <td><span class="sev-done sev-badge">High</span></td>   <td><code>supabase_pgvector_test.py</code></td> <td><code>vector_literal()</code> bypasses SQL parameterization</td>                  <td><span class="check">✔ f52a8b8</span></td></tr>
+      <tr class="done-row"><td>8</td>  <td><span class="sev-done sev-badge">Medium</span></td> <td><code>llm/client.py:1</code></td>           <td>Module docstring after import — <code>__doc__</code> is <code>None</code></td>    <td><span class="check">✔ 3a04688</span></td></tr>
+      <tr><td>9</td>  <td><span class="sev-yellow sev-badge">Medium</span></td><td><code>chunker.py:6</code></td>             <td>Section regex false-positives on all-caps content</td>                           <td><span class="box"></span></td></tr>
+      <tr><td>10</td> <td><span class="sev-yellow sev-badge">Medium</span></td><td><code>chunker.py:86</code></td>            <td>Window can advance 1 char — hangs on large text</td>                             <td><span class="box"></span></td></tr>
+      <tr><td>11</td> <td><span class="sev-yellow sev-badge">Medium</span></td><td><code>vector_store.py (deleted)</code></td><td>Chroma cosine distance → similarity wrong (note for future)</td>                <td><span class="box"></span></td></tr>
+      <tr><td>12</td> <td><span class="sev-yellow sev-badge">Medium</span></td><td><code>service.py (deleted)</code></td>    <td><code>BEGIN IMMEDIATE</code> not commented (moot)</td>                            <td><span class="box"></span></td></tr>
+      <tr><td>13</td> <td><span class="sev-yellow sev-badge">Medium</span></td><td><code>api/routes.py:88</code></td>        <td>No rate limiting on <code>/search</code> and <code>/ask</code></td>             <td><span class="box"></span></td></tr>
+      <tr><td>14</td> <td><span class="sev-yellow sev-badge">Medium</span></td><td><code>retriever.py:17</code></td>         <td>New <code>SupabaseLibrary</code> instantiated per request</td>                   <td><span class="box"></span></td></tr>
+      <tr><td>15</td> <td><span class="sev-green sev-badge">Low</span></td>   <td><code>loader.py:29</code></td>            <td><code>source_id</code> from filename collides across dirs</td>                   <td><span class="box"></span></td></tr>
+      <tr><td>16</td> <td><span class="sev-green sev-badge">Low</span></td>   <td><code>schemas.py:31</code></td>           <td><code>vector_score</code> is a confusing alias for <code>score</code></td>       <td><span class="box"></span></td></tr>
+      <tr class="done-row"><td>17</td> <td><span class="sev-done sev-badge">Low</span></td>   <td><code>service.py (deleted)</code></td>   <td>Double <code>json.loads(profile)</code> per row</td>                            <td><span class="check">✔ deleted</span></td></tr>
+      <tr class="done-row"><td>18</td> <td><span class="sev-done sev-badge">Low</span></td>   <td><code>api/routes.py:84</code></td>       <td>CORS <code>allow_methods</code> note</td>                                       <td><span class="check">✔ closed</span></td></tr>
+      <tr class="done-row"><td>R1</td> <td><span class="sev-done sev-badge">Critical</span></td><td><code>supabase_store.py:46</code></td> <td>Shared <code>_VectorDumper.oid</code> race condition</td>                       <td><span class="check">✔ 847d8d1</span></td></tr>
+      <tr class="done-row"><td>R2</td> <td><span class="sev-done sev-badge">Critical</span></td><td><code>supabase_pgvector_test.py:40</code></td><td><code>db_connection()</code> not a proper context manager</td>          <td><span class="check">✔ 847d8d1</span></td></tr>
+      <tr class="done-row"><td>R3</td> <td><span class="sev-done sev-badge">Critical</span></td><td><code>supabase_store.py:151</code></td><td>Preview fetch allows collection-oracle timing leak</td>                       <td><span class="check">✔ 847d8d1</span></td></tr>
+      <tr class="done-row"><td>N1</td> <td><span class="sev-done sev-badge">Medium</span></td> <td><code>supabase_store.py:365</code></td>    <td>Duplicate check misses live <code>sha256</code> column</td>                    <td><span class="check">✔ 8d47aec</span></td></tr>
+      <tr class="done-row"><td>N2</td> <td><span class="sev-done sev-badge">Medium</span></td> <td><code>llm/client.py:113</code></td>        <td>Raw match dicts with internal IDs sent to LLM</td>                             <td><span class="check">✔ ce61583</span></td></tr>
+      <tr><td>N3</td> <td><span class="sev-yellow sev-badge">Medium</span></td><td><code>config.py:35</code></td>           <td>Hard startup crash for any non-HuggingFace provider</td>                        <td><span class="box"></span></td></tr>
+      <tr><td>N4</td> <td><span class="sev-green sev-badge">Low</span></td>   <td><code>chunker.py:48</code></td>           <td>Default <code>section: "FAQ"</code> misleading for non-FAQ docs</td>             <td><span class="box"></span></td></tr>
+      <tr><td>N5</td> <td><span class="sev-green sev-badge">Low</span></td>   <td><code>streamlit_app.py:21</code></td>     <td>Production UI imports from smoke-test script</td>                               <td><span class="box"></span></td></tr>
     </tbody>
   </table>
 
@@ -495,12 +326,11 @@
   <table class="summary-table" style="margin-top:8px">
     <thead><tr><th>#</th><th>Finding</th><th>Why now</th></tr></thead>
     <tbody>
-      <tr><td>N1</td><td>Add <code>sha256</code> branch to duplicate check in <code>commit()</code></td><td>Live schema uses <code>sha256</code>; every re-upload pays embedding API cost</td></tr>
-      <tr><td>N2</td><td>Strip match dicts to <code>{chunk_id, text, title, section}</code> before LLM</td><td>Reduces token cost and removes internal IDs from untrusted context</td></tr>
       <tr><td>13</td><td>Add <code>slowapi</code> rate limiting + <code>X-Request-Id</code> header</td><td>Protects HF quota once Pulse360 goes live</td></tr>
       <tr><td>14</td><td>Inject <code>SupabaseLibrary</code> via <code>Depends()</code> in retriever</td><td>Eliminates per-request psycopg overhead under load</td></tr>
-      <tr><td>9</td> <td>Tighten section regex in chunker</td><td>Retrieval quality — directly affects answer accuracy</td></tr>
+      <tr><td>9</td> <td>Tighten section regex in chunker</td><td>Retrieval quality — directly affects answer accuracy on real documents</td></tr>
       <tr><td>10</td><td>Fix window advance guard in chunker</td><td>Prevents ingestion hang on large documents</td></tr>
+      <tr><td>N3</td><td>Downgrade provider check to warning in <code>Settings</code></td><td>Unblocks testing with alternative providers</td></tr>
     </tbody>
   </table>
 
