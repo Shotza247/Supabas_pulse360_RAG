@@ -4,6 +4,14 @@ Supabase-backed FAQ RAG service for Pulse360. FastAPI backend with pgvector
 similarity search, hosted HuggingFace embeddings and LLM synthesis, and a
 Streamlit workspace UI.
 
+## To deploy
+Before pushing to Vercel, run these two migrations against your Supabase project:
+
+psql "$SUPABASE_DATABASE_URL" -f docs/migrations/001_add_rag_previews.sql
+psql "$SUPABASE_DATABASE_URL" -f docs/migrations/002_add_rate_limits.sql
+
+Then set all the required Vercel environment variables from .env.example and deploy. The system is now production-ready.
+
 ## Current status
 
 The codebase is **Supabase-only**. All Qdrant, SQLite, and Chroma adapters
