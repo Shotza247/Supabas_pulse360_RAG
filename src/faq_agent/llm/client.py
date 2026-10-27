@@ -99,13 +99,33 @@ def validate_answer(raw, matches):
 _LLM_EVIDENCE_FIELDS = ("chunk_id", "text", "title", "section")
 
 
+def _llm_auth_header(settings) -> str:
+    """Return the correct Authorization header value for the configured provider.
+
+    huggingface — uses HF_TOKEN with the HuggingFace router.
+    openai       — uses OPENAI_API_KEY with api.openai.com (or a compatible base URL).
+    Any other value raises ValueError at call time, not at config load time (finding N3).
+    """
+    if settings.llm_provider == "huggingface":
+        if not settings.hf_token:
+            raise ValueError("Configure HF_TOKEN for the huggingface provider")
+        return f"Bearer {settings.hf_token}"
+    if settings.llm_provider == "openai":
+        if not settings.openai_api_key:
+            raise ValueError("Configure OPENAI_API_KEY for the openai provider")
+        return f"Bearer {settings.openai_api_key}"
+    raise ValueError(
+        f"Unsupported llm_provider {settings.llm_provider!r}. "
+        "Set LLM_PROVIDER to 'huggingface' or 'openai'."
+    )
+
+
 def synthesize(question, matches, settings):
     if not matches:
         return {"answer": ABSTENTION, "sources": [], "status": "insufficient_evidence"}
-    if settings.llm_provider != "huggingface":
-        raise ValueError("Basic hosted synthesis currently supports huggingface only")
-    if not settings.hf_token or not settings.llm_model:
-        raise ValueError("Configure HF_TOKEN and LLM_MODEL")
+    if not settings.llm_model:
+        raise ValueError("Configure LLM_MODEL")
+    auth = _llm_auth_header(settings)
     # Strip each match to only the fields the LLM needs.  The full matches
     # list is kept separately so validate_answer() can still build complete
     # citation objects (including vector_score, filename, page, etc.) for
@@ -116,7 +136,7 @@ def synthesize(question, matches, settings):
     ]
     response = _post_with_retry(
         settings.llm_base_url.rstrip("/") + "/chat/completions",
-        headers={"Authorization": f"Bearer {settings.hf_token}"},
+        headers={"Authorization": auth},
         payload={
             "model": settings.llm_model,
             "temperature": 0,

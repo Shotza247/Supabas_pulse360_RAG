@@ -26,6 +26,7 @@ class Settings:
     llm_base_url: str = "https://router.huggingface.co/v1"
     llm_provider: str = "huggingface"
     llm_model: str = ""
+    openai_api_key: str = ""
     request_timeout: int = 30
     context_k: int = 4
     chunk_chars: int = 1000
