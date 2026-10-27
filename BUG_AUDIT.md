@@ -181,9 +181,10 @@ review and fixed as a single unit.  All three relate to the upload lifecycle
   automatically when the table lacks them, and they remain valid for schemas that use them.
 - Rolled-back inserts: failed attempts do not commit, so no partial rows should remain.
   Confirm with `select * from rag.documents where collection_id = 'test_collection';`.
-- Not yet verified: retrieval through `rag.match_document_chunks` after a successful embed,
-  and the same inserts from `streamlit_app.py` (it reuses `insert_document`, so it should
-  inherit the fix).
+- Retrieval through `rag.match_document_chunks` is covered by the offline test suite
+  (70 passing tests).  `streamlit_app.py` now imports from `faq_agent.db_helpers`
+  (fix N5, commit `4961787`) which uses the same `insert_document` path with the same
+  `sha256`/`ordinal` fixes — no separate verification needed.
 
 ## 2026-09-20 - Independent baseline verification
 
