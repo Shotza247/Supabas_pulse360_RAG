@@ -10,11 +10,11 @@ The codebase is **Supabase-only**. All Qdrant, SQLite, and Chroma adapters
 have been removed. The FastAPI document routes, Streamlit workspace, and
 standalone smoke-test all use the direct Supabase/pgvector path.
 
-**Test suite:** 46/46 offline tests pass. No live database or API keys required
+**Test suite:** 70/70 offline tests pass. No live database or API keys required
 to run tests.
 
-**Code review progress:** 15 of 25 findings resolved (60%). All critical and
-high findings are closed. See the [code-review artifact](.bob/artifacts/code-review-supabas-pulse360-rag.html)
+**Code review progress:** All 25 findings resolved (100%). See the
+[code-review artifact](.bob/artifacts/code-review-supabas-pulse360-rag.html)
 and [BUG_AUDIT.md](BUG_AUDIT.md) for full details.
 
 ## Architecture
