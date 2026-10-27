@@ -74,6 +74,27 @@ def _register_vector_dumper(connection) -> None:
     connection.adapters.register_dumper(list, _VectorDumper)
 
 
+def _extract_section(row: dict) -> str:
+    """Read section label from the chunk metadata JSON column.
+
+    The chunker stores section in metadata at ingest time.  The DB column
+    may be named 'metadata' and hold a JSON string or a parsed dict
+    (psycopg3 returns jsonb as a dict automatically).  Returns "" if the
+    column is absent or the key is not present.
+    """
+    meta = row.get("metadata")
+    if meta is None:
+        return ""
+    if isinstance(meta, str):
+        try:
+            meta = json.loads(meta)
+        except (ValueError, TypeError):
+            return ""
+    if isinstance(meta, dict):
+        return meta.get("section") or ""
+    return ""
+
+
 class SupabaseLibrary:
     def __init__(self, settings):
         self.s = settings
@@ -511,7 +532,9 @@ class SupabaseLibrary:
                 "chunk_id": str(row["chunk_id"]),
                 "text": row["content"],
                 "title": row["filename"],
-                "section": "",
+                # section is stored in the metadata JSON column at ingest time;
+                # fall back to "" if the column is absent or the key is missing.
+                "section": _extract_section(row),
                 "filename": row["filename"],
                 "page": row["page_number"],
                 "document_id": str(row["document_id"]),

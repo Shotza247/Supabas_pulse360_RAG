@@ -90,8 +90,10 @@ response citations by `validate_answer()` after the LLM call returns.
 Only committed documents are searchable.
 
 Rate limiting applies to `/search` and `/ask`: 30 requests per IP per 60-second
-window via an in-process fixed-window counter. Requests over the limit receive
-HTTP 429 before any embedding or DB work begins.
+window. The counter is stored in `rag.rate_limits` (Supabase) so it is shared
+across all Vercel serverless invocations and Gunicorn workers. Falls back to an
+in-process counter when no database URL is configured (tests, local dev).
+Requests over the limit receive HTTP 429 before any embedding or DB work begins.
 
 The shared `SupabaseLibrary` instance is cached via `lru_cache` on the frozen
 `Settings` key — a single connection pool is reused across all requests.
@@ -113,6 +115,7 @@ recognised heading. The section regex requires a colon for all-caps labels
 | File | Purpose |
 |------|---------|
 | `docs/migrations/001_add_rag_previews.sql` | Add `rag.previews` table for durable upload session storage |
+| `docs/migrations/002_add_rate_limits.sql` | Add `rag.rate_limits` table for distributed cross-worker rate limiting |
 
 ## Limitations and next steps
 
@@ -124,10 +127,13 @@ Similarity scores are not confidence estimates. Citation validation checks that
 IDs exist in the evidence; factual quality needs evaluation. There is no active
 reranking, conversational memory, Drive sync or monitoring stack.
 
-The rate limiter is in-process and not shared across workers. A distributed cache
-(Redis or Supabase table) is needed for multi-worker deployments before public
-launch. The deleted Chroma and SQLite files (#11, #12) are not present in the
-current codebase.
+The rate limiter uses `rag.rate_limits` in Supabase — shared across workers.
+The deleted Chroma and SQLite files (#11, #12) are not present in the current
+codebase.
+
+LLM synthesis supports `huggingface` (dev/sandbox) and `openai` (production).
+Switch providers by updating `LLM_PROVIDER`, `LLM_BASE_URL`, `LLM_MODEL`, and
+the corresponding API key in `.env`.
 
 **All tracked code-review findings are now resolved.** See `BUG_AUDIT.md` and the
 code-review HTML artifact for the full record.
