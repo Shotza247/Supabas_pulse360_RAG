@@ -1,14 +1,15 @@
 import logging
 import time
-from collections import defaultdict
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from faq_agent.api.documents import router as library_router
 from faq_agent.config import get_settings
+from faq_agent.rate_limiter import RATE_LIMIT, RATE_WINDOW, _local_counters  # test helpers
+from faq_agent.rate_limiter import check as _rate_check
 from faq_agent.retrieval.retriever import answer_question, search_question
 
 logger = logging.getLogger("faq_agent")
@@ -75,27 +76,30 @@ class SearchResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Simple fixed-window rate limiter (finding #13).
+# Distributed fixed-window rate limiter.
 #
-# No external dependency: a defaultdict tracks (ip, window_start) → count.
-# Window size: 60 s.  Limit: 30 requests per IP per window.
-# On overflow the request receives 429 before any embedding or DB work begins.
+# Uses a Supabase rag.rate_limits table so the counter is shared across
+# all Vercel serverless invocations and Gunicorn workers.  Falls back to an
+# in-process counter (rate_limiter._local_counters) when no database URL is
+# configured — used by the offline test suite.
+#
+# Window: 60 s.  Limit: 30 requests per IP per window.
 # ---------------------------------------------------------------------------
-_RATE_LIMIT = 30          # max requests per window
-_RATE_WINDOW = 60         # seconds
-_rate_counters: dict[tuple[str, int], int] = defaultdict(int)
+
+# Re-export for tests that import from this module
+_RATE_LIMIT = RATE_LIMIT
+_RATE_WINDOW = RATE_WINDOW
+_rate_counters = _local_counters  # alias so conftest.py clear_rate_counters still works
 
 
-def _check_rate_limit(request: Request) -> None:
+def _check_rate_limit(request: Request) -> str:
+    """Enforce rate limit and return the client IP."""
     ip = request.client.host if request.client else "unknown"
-    window = int(time.monotonic() // _RATE_WINDOW)
-    key = (ip, window)
-    _rate_counters[key] += 1
-    # Prune keys from previous windows to avoid unbounded growth.
-    for old_key in [k for k in _rate_counters if k[1] < window - 1]:
-        del _rate_counters[old_key]
-    if _rate_counters[key] > _RATE_LIMIT:
+    settings = get_settings()
+    allowed = _rate_check(ip, settings.supabase_database_url or None)
+    if not allowed:
         raise HTTPException(429, detail={"message": "Too many requests — please slow down.", "request_id": ""})
+    return ip
 
 
 def create_app(answerer=None, searcher=None):
@@ -124,10 +128,11 @@ def create_app(answerer=None, searcher=None):
             }
         },
     )
-    def search(body: AskRequest, request: Request):
+    def search(body: AskRequest, request: Request, response: Response):
         """Vector-only retrieval: source text and vector scores, with no reranking or LLM call."""
         _check_rate_limit(request)
         request_id = str(uuid4())
+        response.headers["X-Request-Id"] = request_id
         try:
             return {
                 "matches": (searcher or search_question)(
@@ -157,11 +162,12 @@ def create_app(answerer=None, searcher=None):
             }
         },
     )
-    def ask(body: AskRequest, request: Request):
+    def ask(body: AskRequest, request: Request, response: Response):
         """Run the same vector search as /search, then synthesize a cited answer. No reranking."""
         _check_rate_limit(request)
         # Blocking provider calls run in FastAPI's thread pool.
         request_id, started = str(uuid4()), time.monotonic()
+        response.headers["X-Request-Id"] = request_id
         try:
             result = (
                 (answerer or answer_question)(body.question, body.collection_id, body.document_id)

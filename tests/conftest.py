@@ -2,17 +2,18 @@
 
 import pytest
 
-from faq_agent.api.routes import _rate_counters
+from faq_agent.rate_limiter import clear_local
 
 
 @pytest.fixture(autouse=True)
 def clear_rate_counters():
     """Reset the in-process rate-limit counter before every test.
 
-    The counter is module-level state so it bleeds across tests that share the
-    same pytest process, causing spurious 429 failures on routes that happen to
-    run after test_rate_limit_returns_429 has saturated the window.
+    The counter lives in rate_limiter._local_counters.  The alias
+    _rate_counters in routes.py points to the same object so both modules
+    stay in sync.  Tests run without a live DB so the local fallback path
+    is always used.
     """
-    _rate_counters.clear()
+    clear_local()
     yield
-    _rate_counters.clear()
+    clear_local()
