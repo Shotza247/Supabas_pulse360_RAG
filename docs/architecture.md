@@ -108,6 +108,12 @@ The default chunk section name is `"General"` for documents that contain no
 recognised heading. The section regex requires a colon for all-caps labels
 (`RETURNS POLICY:`) to avoid treating acronyms and table headers as boundaries.
 
+## Migrations
+
+| File | Purpose |
+|------|---------|
+| `docs/migrations/001_add_rag_previews.sql` | Add `rag.previews` table for durable upload session storage |
+
 ## Limitations and next steps
 
 Chunking uses sections and overlapping character windows, not an embedding model.
