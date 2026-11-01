@@ -17,7 +17,10 @@ class AskRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     question: str = Field(min_length=2, max_length=800)
     collection_id: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_-]{2,47}$")
-    document_id: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+    document_id: str | None = Field(
+        default=None,
+        pattern=r"^([a-f0-9]{64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+    )
 
     @model_validator(mode="after")
     def validate_scope(self):
@@ -82,7 +85,7 @@ def create_app(answerer=None, searcher=None):
         CORSMiddleware,
         allow_origins=settings.origins,
         allow_methods=["POST", "GET"],
-        allow_headers=["Content-Type"],
+        allow_headers=["Content-Type", "X-API-Key"],
     )
 
     @app.get("/health")

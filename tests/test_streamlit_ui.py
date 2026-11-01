@@ -1,9 +1,43 @@
+from decimal import Decimal
+from importlib import import_module
 from pathlib import Path
 from unittest.mock import Mock, patch
+from uuid import uuid4
 
 from streamlit.testing.v1 import AppTest
 
 APP = Path(__file__).resolve().parents[1] / "streamlit_app.py"
+
+
+def test_answer_from_matches_normalizes_postgres_values(monkeypatch):
+    monkeypatch.syspath_prepend(str(APP.parent))
+    streamlit_app = import_module("streamlit_app")
+
+    chunk_id, document_id = uuid4(), uuid4()
+    monkeypatch.setattr(
+        streamlit_app, "synthesize", lambda question, sources, settings: {"answer": "Answer"}
+    )
+    monkeypatch.setattr(streamlit_app, "get_settings", lambda: None)
+
+    result, sources = streamlit_app.answer_from_matches(
+        "Question?",
+        [
+            {
+                "chunk_id": chunk_id,
+                "document_id": document_id,
+                "content": "Relevant text",
+                "filename": "faq.md",
+                "page_number": 2,
+                "similarity": Decimal("0.875"),
+            }
+        ],
+    )
+
+    assert result["answer"] == "Answer"
+    assert sources[0]["chunk_id"] == str(chunk_id)
+    assert sources[0]["document_id"] == str(document_id)
+    assert sources[0]["vector_score"] == 0.875
+    assert isinstance(sources[0]["vector_score"], float)
 
 
 def test_create_select_search_and_answer():

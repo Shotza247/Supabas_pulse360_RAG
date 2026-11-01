@@ -27,7 +27,7 @@ class Embeddings:
 @pytest.fixture
 def library(tmp_path):
     lib = Library(
-        Settings(vector_dimensions=3),
+        Settings(vector_store="qdrant", vector_dimensions=3),
         path=tmp_path / "library.sqlite3",
         client=QdrantClient(":memory:"),
         embeddings=Embeddings(),
@@ -99,13 +99,25 @@ def test_validation_and_expiry(library):
     assert error.value.status_code == 409
 
 
-def test_api_upload_and_scope(library):
+def test_api_upload_and_scope(library, monkeypatch):
+    monkeypatch.setenv("ADMIN_API_KEY", "test-admin-key")
+    commit = library.commit
+    monkeypatch.setattr(
+        library,
+        "commit",
+        lambda collection_id, preview_id, approved, category: commit(
+            collection_id, preview_id, approved
+        ),
+    )
     app = create_app(searcher=lambda q, c, d: library.search(c, q, d))
     app.dependency_overrides[get_library] = lambda: library
     client = TestClient(app)
-    assert len(client.get("/collections").json()) == 2
+    headers = {"X-API-Key": "test-admin-key"}
+    assert len(client.get("/collections", headers=headers).json()) == 2
     response = client.post(
-        "/collections/first/uploads/preview", files={"file": ("faq.md", b"FAQ example answer.")}
+        "/collections/first/uploads/preview",
+        files={"file": ("faq.md", b"FAQ example answer.")},
+        headers=headers,
     )
     assert response.status_code == 200
     preview = response.json()
@@ -113,6 +125,7 @@ def test_api_upload_and_scope(library):
         client.post(
             "/collections/first/documents",
             json={"preview_id": preview["preview_id"], "approved": False},
+            headers=headers,
         ).status_code
         == 422
     )
@@ -120,6 +133,7 @@ def test_api_upload_and_scope(library):
         client.post(
             "/collections/first/documents",
             json={"preview_id": preview["preview_id"], "approved": True},
+            headers=headers,
         ).status_code
         == 200
     )

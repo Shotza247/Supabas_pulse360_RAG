@@ -22,6 +22,11 @@ Run each server in a separate terminal:
 Open http://127.0.0.1:8502. `FAQ_API_URL` overrides the UI's API address (default
 http://127.0.0.1:8767). If a port is already occupied, use an available one.
 
+The document-library API routes require an admin key. Before starting the API,
+set `ADMIN_API_KEY` in your private `.env` file to a long, unique secret (do not
+commit it). Send that same value in the `X-API-Key` header for every
+`/collections` request. These routes remain locked when the variable is unset.
+
 ## Workflow
 
 1. Create `pulse360_faq`, or select a collection created through this application.
@@ -42,11 +47,11 @@ accessible through /search and /ask when collection_id is omitted.
 
 | Method | Route | Purpose |
 | --- | --- | --- |
-| GET | /collections | List application-managed collections |
-| POST | /collections | Create with `{"name":"pulse360_faq"}` |
-| GET | /collections/{id}/documents | List committed documents |
-| POST | /collections/{id}/uploads/preview | Multipart `file`; extract and chunk locally |
-| POST | /collections/{id}/documents | `preview_id` and `approved:true`; embed/store |
+| GET | /collections | List application-managed collections (`X-API-Key` required) |
+| POST | /collections | Create with `{"name":"pulse360_faq"}` (`X-API-Key` required) |
+| GET | /collections/{id}/documents | List committed documents (`X-API-Key` required) |
+| POST | /collections/{id}/uploads/preview | Multipart `file`; extract and chunk locally (`X-API-Key` required) |
+| POST | /collections/{id}/documents | `preview_id` and `approved:true`; embed/store (`X-API-Key` required) |
 | POST | /search | question, optional collection_id and document_id |
 | POST | /ask | Same retrieval scope, then HF synthesis |
 

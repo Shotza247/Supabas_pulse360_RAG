@@ -60,13 +60,13 @@ def render_sources(items: list[dict]) -> None:
 def answer_from_matches(question: str, matches: list[dict]):
     normalized = [
         {
-            "chunk_id": item["chunk_id"],
+            "chunk_id": str(item["chunk_id"]),
             "text": item["content"],
             "filename": item.get("filename"),
             "page": item.get("page_number"),
-            "document_id": item.get("document_id"),
-            "vector_score": item.get("similarity"),
-            "score": item.get("similarity"),
+            "document_id": str(item.get("document_id")),
+            "vector_score": float(item["similarity"]) if item.get("similarity") is not None else None,
+            "score": float(item["similarity"]) if item.get("similarity") is not None else None,
             "rerank_score": None,
             "title": item.get("filename", ""),
             "section": "",

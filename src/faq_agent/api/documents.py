@@ -1,18 +1,31 @@
 """Supabase-backed collection and approved ingestion endpoints."""
 
+import hmac
 import logging
+import os
 from contextlib import contextmanager
 from typing import Annotated
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, Header, HTTPException, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 
 from faq_agent.config import get_settings
 from faq_agent.supabase_store import MAX_BYTES, SupabaseLibrary
 
-router = APIRouter(tags=["Document library"])
 logger = logging.getLogger("faq_agent")
+
+
+def require_admin(x_api_key: str | None = Header(default=None)):
+    """Library routes are admin-only; with ADMIN_API_KEY unset they stay locked."""
+    expected = os.getenv("ADMIN_API_KEY", "")
+    if not expected or not x_api_key or not hmac.compare_digest(
+        x_api_key.encode("utf-8"), expected.encode("utf-8")
+    ):
+        raise HTTPException(401, "Admin API key required")
+
+
+router = APIRouter(tags=["Document library"], dependencies=[Depends(require_admin)])
 
 
 @contextmanager

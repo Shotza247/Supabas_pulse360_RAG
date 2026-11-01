@@ -1,6 +1,8 @@
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
+from faq_agent.api.documents import get_library, require_admin
 from faq_agent.api.routes import create_app
 
 
@@ -64,6 +66,35 @@ def test_cors():
         headers={"Origin": "https://untrusted.example", "Access-Control-Request-Method": "POST"},
     )
     assert "access-control-allow-origin" not in response.headers
+
+
+def test_library_api_key_and_cors(monkeypatch):
+    from types import SimpleNamespace
+
+    app = create_app()
+    app.dependency_overrides[get_library] = lambda: SimpleNamespace(list_collections=list)
+    c = TestClient(app)
+
+    monkeypatch.delenv("ADMIN_API_KEY", raising=False)
+    assert c.get("/collections").status_code == 401
+
+    monkeypatch.setenv("ADMIN_API_KEY", "test-admin-key")
+    with pytest.raises(HTTPException) as error:
+        require_admin("cl\u00e9")
+    assert error.value.status_code == 401
+    response = c.get("/collections", headers={"X-API-Key": "test-admin-key"})
+    assert response.status_code == 200
+
+    preflight = c.options(
+        "/collections",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "x-api-key",
+        },
+    )
+    assert preflight.status_code == 200
+    assert "x-api-key" in preflight.headers["access-control-allow-headers"].lower()
 
 
 def test_service_errors_documented():

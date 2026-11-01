@@ -41,7 +41,7 @@ class SupabaseLibrary:
     @contextmanager
     def connection(self):
         try:
-            with self.psycopg.connect(self.database_url) as connection:
+            with self.psycopg.connect(self.database_url, prepare_threshold=None) as connection:
                 yield connection
         except HTTPException:
             raise
@@ -74,7 +74,14 @@ class SupabaseLibrary:
             raise HTTPException(422, "Use a lowercase collection identifier")
         with self.connection() as connection, connection.cursor() as cursor:
             try:
-                cursor.execute("insert into rag.collections (id) values (%s) returning id", (name,))
+                available = self.columns(connection, "collections")
+                values = {"id": name, "display_name": name, "visibility": "PRIVATE"}
+                columns = [column for column in values if column in available]
+                cursor.execute(
+                    f"insert into rag.collections ({', '.join(columns)}) "
+                    f"values ({', '.join(['%s'] * len(columns))}) returning id",
+                    tuple(values[column] for column in columns),
+                )
                 created = cursor.fetchone()[0]
             except Exception as exc:
                 connection.rollback()
@@ -140,9 +147,10 @@ class SupabaseLibrary:
             if missing:
                 raise HTTPException(500, "Supabase rag schema is missing: " + ", ".join(sorted(missing)))
             existing = None
-            if "checksum" in document_columns:
+            hash_column = next((c for c in ("sha256", "checksum") if c in document_columns), None)
+            if hash_column:
                 cursor.execute(
-                    "select id from rag.documents where collection_id=%s and checksum=%s",
+                    f"select id from rag.documents where collection_id=%s and {hash_column}=%s",
                     (collection_id, preview["digest"]),
                 )
                 existing = cursor.fetchone()
@@ -150,12 +158,12 @@ class SupabaseLibrary:
                 return {"status": "already_stored", "document_id": str(existing[0]), "chunks": 0}
             vectors = build_embedding_client(self.s).embed_documents([chunk.text for chunk in chunks])
             validate_vectors(vectors, len(chunks), self.s.vector_dimensions)
-            values = {"collection_id": collection_id, "filename": preview["filename"], "category": category, "status": "COMMITTED", "checksum": preview["digest"], "content_hash": preview["digest"], "embedding_model": self.s.embedding_model, "embedding_dimensions": self.s.vector_dimensions, "metadata": json.dumps({"source": "fastapi_upload"})}
+            values = {"collection_id": collection_id, "filename": preview["filename"], "category": category, "status": "COMMITTED", "sha256": preview["digest"], "checksum": preview["digest"], "content_hash": preview["digest"], "embedding_model": self.s.embedding_model, "embedding_dimensions": self.s.vector_dimensions, "metadata": json.dumps({"source": "fastapi_upload"})}
             columns = [column for column in values if column in document_columns]
             cursor.execute(f"insert into rag.documents ({', '.join(columns)}) values ({', '.join(['%s'] * len(columns))}) returning id", tuple(values[column] for column in columns))
             document_id = cursor.fetchone()[0]
             for index, (chunk, vector) in enumerate(zip(chunks, vectors, strict=True)):
-                chunk_values = {"document_id": document_id, "content": chunk.text, "chunk_index": index, "page_number": chunk.metadata.get("page"), "embedding": vector_literal(vector), "metadata": json.dumps(chunk.metadata)}
+                chunk_values = {"document_id": document_id, "content": chunk.text, "chunk_index": index, "ordinal": index, "page_number": chunk.metadata.get("page"), "embedding": vector_literal(vector), "metadata": json.dumps(chunk.metadata)}
                 columns = [column for column in chunk_values if column in chunk_columns]
                 cursor.execute(f"insert into rag.document_chunks ({', '.join(columns)}) values ({', '.join(['%s'] * len(columns))})", tuple(chunk_values[column] for column in columns))
         _PREVIEWS.pop(token, None)
@@ -170,4 +178,4 @@ class SupabaseLibrary:
             rows = [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
         if document_id:
             rows = [row for row in rows if str(row["document_id"]) == document_id]
-        return [{"chunk_id": str(row["chunk_id"]), "text": row["content"], "title": row["filename"], "section": "", "filename": row["filename"], "page": row["page_number"], "document_id": str(row["document_id"]), "vector_score": row["similarity"], "score": row["similarity"], "rerank_score": None} for row in rows]
+        return [{"chunk_id": str(row["chunk_id"]), "text": row["content"], "title": row["filename"], "section": "", "filename": row["filename"], "page": row["page_number"], "document_id": str(row["document_id"]), "vector_score": float(row["similarity"]), "score": float(row["similarity"]), "rerank_score": None} for row in rows]
