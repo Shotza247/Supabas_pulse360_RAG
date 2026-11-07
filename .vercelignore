@@ -6,3 +6,6 @@ docs
 .git
 .local
 __pycache__
+scripts
+streamlit_app.py
+supabase_pgvector_test.py

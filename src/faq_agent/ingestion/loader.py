@@ -25,8 +25,11 @@ def load_document(path: Path) -> SourceDocument:
     if not clean_text:
         raise ValueError(f"No readable text found in {path}")
 
+    # Use a hash of the resolved absolute path so that two files with the same
+    # stem in different directories always get distinct source_ids (finding #15).
+    source_id = hashlib.sha256(str(path.resolve()).encode()).hexdigest()[:24]
     return SourceDocument(
-        source_id=path.stem.lower().replace(" ", "-"),
+        source_id=source_id,
         path=str(path),
         title=path.stem,
         text=clean_text,

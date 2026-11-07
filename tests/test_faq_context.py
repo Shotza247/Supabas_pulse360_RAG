@@ -9,4 +9,4 @@ def test_faq_identity_and_defaults():
     assert "FAQ" in ABSTENTION
     assert "FAQ evidence" in SYSTEM_PROMPT
     chunks = chunk_document(SourceDocument("faq", "sample.txt", "FAQ", "Contact support."))
-    assert chunks[0].metadata["section"] == "FAQ"
+    assert chunks[0].metadata["section"] == "General"

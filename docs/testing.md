@@ -15,10 +15,10 @@ Install dev and UI extras, then run from the project root:
 .\.venv\Scripts\ruff.exe check src scripts tests main.py streamlit_app.py
 ```
 
-Tests use simulated providers and in-memory Qdrant, not HF credits. They cover
-request validation, error redaction, citation validation, chunk bounds, embedding
-dimensions, corpus isolation, upload approval, duplicate handling, preview expiry,
-partial commit recovery, UI controls and configuration compatibility.
+Tests use simulated providers and mocked database access; they do not require a
+live Supabase database or consume HF credits. They cover request validation,
+rate limiting, error redaction, citation validation, chunk bounds, embedding
+dimensions, upload approval, UI controls and configuration compatibility.
 
 The UI uses native text elements for document lists: this machine's Application
 Control policy rejects PyArrow's data-table runtime. No security policy changes
@@ -27,11 +27,11 @@ are necessary for the current UI.
 ## Live checks
 
 1. Confirm GET /health returns 200; it is liveness, not a provider readiness check.
-2. Confirm GET /collections lists managed collections and that the selected
+2. Confirm authenticated GET /collections lists collections and that the selected
    collection's documents remain visible after a restart.
-3. Select ui_smoke_test in Streamlit and ask "What does Project Atlas show?".
-   Search should return the synthetic chunk; Answer should cite it. These calls
-   consume hosted credits. Use included credits only.
+3. Select a collection in Streamlit and ask a question grounded in a reviewed
+   document. Search should return matching chunks; Answer should cite them.
+   Hosted calls may consume credits.
 4. For new documents, preview locally before approval. Verify filename, pages and
    chunk boundaries. Then approve and embed deliberately.
 5. Test answerable, unanswerable and misleading questions against reviewed facts.
@@ -56,15 +56,3 @@ The evaluator calls the active /search endpoint and reports mean recall at the
 configured CONTEXT_K and mean reciprocal rank. It makes embedding calls, not LLM
 calls. Labels are collection-specific; re-chunking changes chunk IDs. Evaluate
 answer correctness and source support separately from retrieval ranking.
-
-## CLI corpus
-
-For the separate versioned-corpus workflow, local inspection requires no approval:
-
-```powershell
-.\.venv\Scripts\python.exe scripts/ingest_faq.py --source examples/faq --version review-001 --dry-run
-```
-
-To actually ingest, use a new version and explicitly pass --approved-public only
-after reviewing all files in the source folder. This CLI does not register UI
-documents. Prefer the UI for individual collection-scoped uploads.

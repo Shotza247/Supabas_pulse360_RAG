@@ -4,10 +4,11 @@ tags: []
 
 ---
 
-# Local FAQ workspace
+# Supabase pgvector workspace
 
-The Streamlit UI calls FastAPI; only the backend holds HF and Qdrant credentials.
-This version is a single-user local test workspace, not a public deployment.
+The Streamlit UI and FastAPI service connect directly to Supabase PostgreSQL.
+Keep database and provider credentials in the server-side `.env`; do not expose
+them to a browser or commit them.
 
 ## Run
 
@@ -19,35 +20,36 @@ Run each server in a separate terminal:
 .\.venv\Scripts\python.exe -m streamlit run streamlit_app.py --server.address 127.0.0.1 --server.port 8502 --browser.gatherUsageStats false
 ```
 
-Open http://127.0.0.1:8502. `FAQ_API_URL` overrides the UI's API address (default
-http://127.0.0.1:8767). If a port is already occupied, use an available one.
+Open http://127.0.0.1:8502. The UI can run without the API server; use the API
+server for `/search`, `/ask`, and the document-library endpoints.
 
-The document-library API routes require an admin key. Before starting the API,
-set `ADMIN_API_KEY` in your private `.env` file to a long, unique secret (do not
-commit it). Send that same value in the `X-API-Key` header for every
-`/collections` request. These routes remain locked when the variable is unset.
+The document-library API routes require an admin key. Set `ADMIN_API_KEY` in
+your private `.env` file to a long, unique secret. Send that value in the
+`X-API-Key` header for every `/collections` request. These routes remain locked
+when the variable is unset.
 
 ## Workflow
 
-1. Create `pulse360_faq`, or select a collection created through this application.
-2. Upload `examples/faq/Pulse360_Platform_FAQ.pdf` and select Preview chunks.
+1. Select an existing collection from `rag.collections`. To create one, use the
+   authenticated `POST /collections` API endpoint or create it in Supabase.
+2. Upload a PDF, TXT, or Markdown file and select Preview chunks.
 3. Review the text, page number and chunk count. Preview makes no HF calls.
 4. Approve hosted processing, then select Embed and store. This sends the chunks
-   to the configured HF embedding endpoint and writes vectors/text to Qdrant.
+   to the configured embedding endpoint and writes vectors/text to Supabase.
 5. Open Questions. Choose Search for chunks and vector scores, or Answer for
-   retrieval followed by hosted LLM synthesis with citations. Optionally select
-   a single document. Each question is independent; displayed history is not sent
+   retrieval followed by hosted LLM synthesis with citations. Optionally scope
+   to one document. Each question is independent; displayed history is not sent
    as conversational memory.
 
-The UI lists application-managed collections, not arbitrary existing Qdrant
-collections. The original embedding_demo collection is unchanged and remains
-accessible through /search and /ask when collection_id is omitted.
+The Streamlit UI uses direct PostgreSQL helpers. The API's `/search` and `/ask`
+routes use the shared retrieval service and the configured default collection
+when `collection_id` is omitted.
 
 ## API
 
 | Method | Route | Purpose |
 | --- | --- | --- |
-| GET | /collections | List application-managed collections (`X-API-Key` required) |
+| GET | /collections | List collections (`X-API-Key` required) |
 | POST | /collections | Create with `{"name":"pulse360_faq"}` (`X-API-Key` required) |
 | GET | /collections/{id}/documents | List committed documents (`X-API-Key` required) |
 | POST | /collections/{id}/uploads/preview | Multipart `file`; extract and chunk locally (`X-API-Key` required) |
@@ -57,11 +59,10 @@ accessible through /search and /ask when collection_id is omitted.
 
 ## Boundaries
 
-- Qdrant stores vectors and chunk text. `.local/library.sqlite3` stores the
-  collection registry, committed document records and temporary preview text.
-  Back up both SQLite and Qdrant; the registry is required to access UI documents.
-- Preview IDs expire after one hour. Expired preview rows are removed on the next
-  preview request, not by a background cleanup service.
+- Supabase PostgreSQL stores collections, documents, chunks, vectors, and API
+  previews. Run the migrations in `docs/migrations/` before deployment.
+- API preview IDs expire after one hour. Expired preview rows are removed when
+  a new API preview is created.
 - PDF/TXT/MD only: 10 MB, 100 PDF pages, 100,000 extracted characters and at most
   100 chunks. Scanned PDFs require OCR elsewhere. PDF extraction is page-by-page.
 - Chunking uses configured CHUNK_CHARS and CHUNK_OVERLAP (defaults 1000/150),
@@ -70,26 +71,26 @@ accessible through /search and /ask when collection_id is omitted.
 - The preview shows text and planned vector dimensions, not computed embeddings.
 - Identical file content is deduplicated per collection, even when renamed.
   Failed/interrupted commits can be retried; only committed documents are searched.
-- Collections record their embedding configuration. A changed model/configuration
-  requires a new collection; models with equal dimensions are not interchangeable.
+- Keep the configured embedding model and vector dimensions aligned with the
+  Supabase schema and collection's data.
 - Reranking remains deferred. Vector scores are similarity, not accuracy/confidence.
 - Hosted calls may consume credits; preview does not. The app does not impose a
   provider billing cap. Keep the account restricted to included credits.
-- No authentication, OCR, deletion, multi-user access control or background jobs
-  yet. Keep both servers on loopback. SQLite and synchronous ingestion are local
-  MVP choices, not suitable as-is for ephemeral Vercel instances.
+- The document-library API uses a shared admin key, not per-user authorization.
+  Protect the Streamlit deployment and database credentials; this is not a
+  multi-tenant access-control model. OCR and background ingestion are not included.
 
 ```mermaid
 flowchart LR
-    UI[Streamlit] --> API[FastAPI]
-    API --> Preview[Local extraction and chunk preview]
+    UI[Streamlit] --> DB[(Supabase PostgreSQL)]
+    API[FastAPI] --> Preview[Local extraction and chunk preview]
     Preview --> Approval[Explicit approval]
     Approval --> HF[Hosted HF embeddings]
     HF --> Q[(Qdrant)]
-    API --> Catalog[(SQLite catalog)]
+    API --> DB
     UI --> Query[Question and collection]
     Query --> Search[Shared vector search]
-    Search --> Q
+    Search --> DB
     Search --> Matches[Chunks and vector scores]
     Matches --> LLM[Hosted HF synthesis]
     LLM --> Citations[Answer and validated citation IDs]

@@ -1,10 +1,54 @@
-from faq_agent.prompts.templates import ABSTENTION, SYSTEM_PROMPT
-
 """Basic vector RAG with direct hosted chat, without agent orchestration."""
 
 import json
+import logging
+import time
 
 import requests
+
+from faq_agent.prompts.templates import ABSTENTION, SYSTEM_PROMPT
+
+logger = logging.getLogger("faq_agent")
+
+# Retry configuration — mirrors embedder.py.  Three attempts with exponential
+# back-off so a single transient 429 or 502 from HuggingFace does not fail
+# the user's request permanently.
+_MAX_RETRIES = 3
+_RETRY_STATUSES = {429, 500, 502, 503, 504}
+
+
+def _post_with_retry(url: str, headers: dict, payload: dict, timeout: int) -> requests.Response:
+    """POST with exponential back-off on 429 / 5xx responses.
+
+    Attempts: 1 (immediate) → 2 (1 s delay) → 3 (2 s delay).
+    Non-retryable statuses are raised immediately via raise_for_status().
+    """
+    delay = 1.0
+    for attempt in range(1, _MAX_RETRIES + 1):
+        response = requests.post(url, headers=headers, json=payload, timeout=timeout)
+        if response.status_code not in _RETRY_STATUSES:
+            response.raise_for_status()
+            return response
+        if attempt == _MAX_RETRIES:
+            logger.error(
+                "llm_request_failed url=%s status=%d attempt=%d/%d",
+                url,
+                response.status_code,
+                attempt,
+                _MAX_RETRIES,
+            )
+            response.raise_for_status()
+        logger.warning(
+            "llm_request_retrying url=%s status=%d attempt=%d/%d delay=%.1fs",
+            url,
+            response.status_code,
+            attempt,
+            _MAX_RETRIES,
+            delay,
+        )
+        time.sleep(delay)
+        delay *= 2
+    raise RuntimeError("Retry loop exited without returning")  # pragma: no cover
 
 
 def validate_answer(raw, matches):
@@ -49,17 +93,51 @@ def validate_answer(raw, matches):
     }
 
 
+# Fields sent to the LLM as evidence.  Restricted to what the model needs
+# to answer and cite — internal IDs, scores and filenames are excluded to
+# reduce token usage and avoid leaking storage details into the prompt.
+_LLM_EVIDENCE_FIELDS = ("chunk_id", "text", "title", "section")
+
+
+def _llm_auth_header(settings) -> str:
+    """Return the correct Authorization header value for the configured provider.
+
+    huggingface — uses HF_TOKEN with the HuggingFace router.
+    openai       — uses OPENAI_API_KEY with api.openai.com (or a compatible base URL).
+    Any other value raises ValueError at call time, not at config load time (finding N3).
+    """
+    if settings.llm_provider == "huggingface":
+        if not settings.hf_token:
+            raise ValueError("Configure HF_TOKEN for the huggingface provider")
+        return f"Bearer {settings.hf_token}"
+    if settings.llm_provider == "openai":
+        if not settings.openai_api_key:
+            raise ValueError("Configure OPENAI_API_KEY for the openai provider")
+        return f"Bearer {settings.openai_api_key}"
+    raise ValueError(
+        f"Unsupported llm_provider {settings.llm_provider!r}. "
+        "Set LLM_PROVIDER to 'huggingface' or 'openai'."
+    )
+
+
 def synthesize(question, matches, settings):
     if not matches:
         return {"answer": ABSTENTION, "sources": [], "status": "insufficient_evidence"}
-    if settings.llm_provider != "huggingface":
-        raise ValueError("Basic hosted synthesis currently supports huggingface only")
-    if not settings.hf_token or not settings.llm_model:
-        raise ValueError("Configure HF_TOKEN and LLM_MODEL")
-    response = requests.post(
+    if not settings.llm_model:
+        raise ValueError("Configure LLM_MODEL")
+    auth = _llm_auth_header(settings)
+    # Strip each match to only the fields the LLM needs.  The full matches
+    # list is kept separately so validate_answer() can still build complete
+    # citation objects (including vector_score, filename, page, etc.) for
+    # the API response — those never leave the server boundary.
+    evidence = [
+        {k: m[k] for k in _LLM_EVIDENCE_FIELDS if k in m}
+        for m in matches
+    ]
+    response = _post_with_retry(
         settings.llm_base_url.rstrip("/") + "/chat/completions",
-        headers={"Authorization": f"Bearer {settings.hf_token}"},
-        json={
+        headers={"Authorization": auth},
+        payload={
             "model": settings.llm_model,
             "temperature": 0,
             "max_tokens": 700,
@@ -67,12 +145,13 @@ def synthesize(question, matches, settings):
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {
                     "role": "user",
-                    "content": json.dumps({"question": question, "evidence": matches}),
+                    "content": json.dumps({"question": question, "evidence": evidence}),
                 },
             ],
         },
         timeout=settings.request_timeout,
     )
-    response.raise_for_status()
     raw = response.json()["choices"][0]["message"]["content"]
+    # validate_answer uses the original full matches so citations in the
+    # response carry scores, filenames and page numbers for the caller.
     return validate_answer(raw, matches)
