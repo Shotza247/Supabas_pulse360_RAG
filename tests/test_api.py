@@ -99,6 +99,112 @@ def test_library_api_key_and_cors(monkeypatch):
     assert "x-api-key" in preflight.headers["access-control-allow-headers"].lower()
 
 
+def _query_client():
+    ok = {"answer": "ok", "sources": [], "status": "answered"}
+    return TestClient(create_app(answerer=lambda q, *a: ok, searcher=lambda q, *a: []))
+
+
+def test_query_routes_open_in_local_without_key(monkeypatch):
+    monkeypatch.delenv("QUERY_API_KEY", raising=False)
+    monkeypatch.delenv("APP_ENV", raising=False)
+    assert _query_client().post("/ask", json={"question": "hello"}).status_code == 200
+
+
+def test_query_routes_fail_closed_outside_local(monkeypatch):
+    monkeypatch.delenv("QUERY_API_KEY", raising=False)
+    monkeypatch.setenv("APP_ENV", "production")
+    c = _query_client()
+    assert c.post("/ask", json={"question": "hello"}).status_code == 401
+    assert c.post("/search", json={"question": "hello"}).status_code == 401
+
+
+def test_query_key_required_and_checked(monkeypatch):
+    monkeypatch.setenv("QUERY_API_KEY", "query-key")
+    monkeypatch.setenv("ADMIN_API_KEY", "admin-key")
+    c = _query_client()
+    body = {"question": "hello"}
+    assert c.post("/ask", json=body).status_code == 401
+    assert c.post("/ask", json=body, headers={"X-API-Key": "wrong"}).status_code == 401
+    # The admin key must not unlock query routes.
+    assert c.post("/ask", json=body, headers={"X-API-Key": "admin-key"}).status_code == 401
+    assert c.post("/ask", json=body, headers={"X-API-Key": "query-key"}).status_code == 200
+    assert c.post("/search", json=body, headers={"X-API-Key": "query-key"}).status_code == 200
+
+
+def test_query_collection_allowlist(monkeypatch):
+    monkeypatch.setenv("QUERY_API_KEY", "query-key")
+    monkeypatch.setenv("PUBLIC_COLLECTIONS", "pulse360_faq, other_public")
+    headers = {"X-API-Key": "query-key"}
+    c = _query_client()
+
+    def ask(collection):
+        body = {"question": "hello", "collection_id": collection}
+        return c.post("/ask", json=body, headers=headers)
+
+    assert ask("pulse360_faq").status_code == 200
+    assert ask("other_public").status_code == 200
+    denied = ask("private_hr_docs")
+    assert denied.status_code == 403
+    assert denied.json()["detail"]["message"] == "Collection is not available."
+
+
+def test_query_collection_defaults_to_configured_collection(monkeypatch):
+    monkeypatch.setenv("QUERY_API_KEY", "query-key")
+    monkeypatch.delenv("PUBLIC_COLLECTIONS", raising=False)
+    monkeypatch.setattr(
+        "faq_agent.api.routes.get_settings", lambda: Settings(collection="faq_documents")
+    )
+    headers = {"X-API-Key": "query-key"}
+    c = _query_client()
+    ok_body = {"question": "hello", "collection_id": "faq_documents"}
+    assert c.post("/ask", json=ok_body, headers=headers).status_code == 200
+    bad_body = {"question": "hello", "collection_id": "pulse360_faq"}
+    assert c.post("/ask", json=bad_body, headers=headers).status_code == 403
+
+
+def _ask_from(c, ip, key="query-key", forwarded=True):
+    headers = {"X-API-Key": key} if key else {}
+    if forwarded and ip:
+        headers["X-Forwarded-Client-IP"] = ip
+    return c.post("/ask", json={"question": "hello"}, headers=headers)
+
+
+def test_rate_limit_is_per_forwarded_visitor_when_trusted(monkeypatch):
+    monkeypatch.setenv("QUERY_API_KEY", "query-key")
+    c = _query_client()
+    for _ in range(_RATE_LIMIT):
+        assert _ask_from(c, "203.0.113.10").status_code == 200
+    # Visitor A is now limited, but visitor B (same Render server) is not.
+    assert _ask_from(c, "203.0.113.10").status_code == 429
+    assert _ask_from(c, "203.0.113.11").status_code == 200
+
+
+def test_forwarded_ip_ignored_without_valid_key(monkeypatch):
+    monkeypatch.delenv("QUERY_API_KEY", raising=False)
+    monkeypatch.setenv("APP_ENV", "local")
+    c = _query_client()
+    # Open local mode is untrusted: rotating the forwarded header must not dodge the limit.
+    for i in range(_RATE_LIMIT):
+        assert _ask_from(c, f"203.0.113.{i + 1}", key=None).status_code == 200
+    assert _ask_from(c, "203.0.113.200", key=None).status_code == 429
+
+
+def test_invalid_forwarded_ip_falls_back_to_peer(monkeypatch):
+    monkeypatch.setenv("QUERY_API_KEY", "query-key")
+    c = _query_client()
+    for i in range(_RATE_LIMIT):
+        assert _ask_from(c, "not-an-ip").status_code == 200
+    assert _ask_from(c, "also-bad").status_code == 429
+
+
+def test_missing_forwarded_ip_falls_back_to_peer(monkeypatch):
+    monkeypatch.setenv("QUERY_API_KEY", "query-key")
+    c = _query_client()
+    for _ in range(_RATE_LIMIT):
+        assert _ask_from(c, None).status_code == 200
+    assert _ask_from(c, None).status_code == 429
+
+
 def test_service_errors_documented():
     schema = client().get("/openapi.json").json()
     for path in ("/search", "/ask"):

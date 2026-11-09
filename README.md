@@ -75,8 +75,13 @@ LLM_MODEL=<model id on HuggingFace router>
 ```
 
 See `.env.example` for all supported keys and defaults.
-`ADMIN_API_KEY` is required for `/collections` routes; `/search` and `/ask`
-remain separately rate-limited.
+`ADMIN_API_KEY` is required for `/collections` routes. `/search` and `/ask`
+require `QUERY_API_KEY` (sent as `X-API-Key`) unless `APP_ENV=local`, and may
+only query collections listed in `PUBLIC_COLLECTIONS` (default: `COLLECTION`).
+Use different values for the two keys. Set `APP_ENV=production` on Vercel so a
+missing `QUERY_API_KEY` fails closed. Both routes are also rate-limited per
+visitor: callers that present a valid `QUERY_API_KEY` may name the end user in
+`X-Forwarded-Client-IP`; all other callers are limited by socket peer.
 
 ## Supabase pgvector smoke test
 

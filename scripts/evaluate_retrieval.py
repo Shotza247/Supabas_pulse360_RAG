@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 import requests
@@ -41,7 +42,10 @@ def main():
         body = {"question": row["question"]}
         if args.collection:
             body["collection_id"] = args.collection
-        response = requests.post(args.api_url.rstrip("/") + "/search", json=body, timeout=90)
+        headers = {"X-API-Key": os.environ["QUERY_API_KEY"]} if os.getenv("QUERY_API_KEY") else {}
+        response = requests.post(
+            args.api_url.rstrip("/") + "/search", json=body, headers=headers, timeout=90
+        )
         if response.status_code != 200:
             parser.error(f"Search failed with HTTP {response.status_code}; inspect API logs")
         matches = response.json()["matches"]
