@@ -56,8 +56,11 @@ class Settings:
         return [x.strip() for x in self.allowed_origins.split(",") if x.strip()]
 
 
-# Type coercion map: field.type is a string under PEP 563 (from __future__ import annotations)
-_COERCE: dict[str, type] = {"int": int, "float": float, "str": str}
+# Type coercion map. field.type is the class itself here (no PEP 563), but is a
+# string under `from __future__ import annotations`, so both forms are keyed.
+# Without the class keys every env value fell back to str and int fields such as
+# CHUNK_OVERLAP failed validation as soon as a .env or Vercel variable set them.
+_COERCE: dict = {int: int, float: float, str: str, "int": int, "float": float, "str": str}
 
 
 @lru_cache
