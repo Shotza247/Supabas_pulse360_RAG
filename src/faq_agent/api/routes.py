@@ -1,4 +1,5 @@
 import hmac
+import ipaddress
 import logging
 import os
 import time
@@ -97,9 +98,29 @@ _RATE_WINDOW = RATE_WINDOW
 _rate_counters = _local_counters  # alias so conftest.py clear_rate_counters still works
 
 
-def _check_rate_limit(request: Request) -> str:
+FORWARDED_IP_HEADER = "x-forwarded-client-ip"
+
+
+def _client_ip(request: Request, trusted: bool) -> str:
+    """Return the IP to rate-limit.
+
+    Pulse360 calls this API from its own server, so the socket peer is the same for
+    every visitor. A caller that proved it holds the query key (``trusted``) may name
+    the real visitor in ``X-Forwarded-Client-IP``. Anyone else is limited by socket
+    peer, so an anonymous caller cannot choose their own rate-limit bucket.
+    """
+    peer = request.client.host if request.client else "unknown"
+    if not trusted:
+        return peer
+    try:
+        return str(ipaddress.ip_address(request.headers.get(FORWARDED_IP_HEADER, "").strip()))
+    except ValueError:
+        return peer
+
+
+def _check_rate_limit(request: Request, trusted: bool = False) -> str:
     """Enforce rate limit and return the client IP."""
-    ip = request.client.host if request.client else "unknown"
+    ip = _client_ip(request, trusted)
     settings = get_settings()
     allowed = _rate_check(ip, settings.supabase_database_url or None)
     if not allowed:
@@ -111,8 +132,11 @@ def _deny(status: int, message: str) -> HTTPException:
     return HTTPException(status, detail={"message": message, "request_id": ""})
 
 
-def _authorize_query(request: Request, collection_id: str | None) -> None:
+def _authorize_query(request: Request, collection_id: str | None) -> bool:
     """Gate the public-facing /ask and /search routes.
+
+    Returns True when the caller authenticated with ``QUERY_API_KEY`` (a trusted
+    server that may forward the end-user IP), False for an open local request.
 
     * ``QUERY_API_KEY`` set: the caller must send it as ``X-API-Key``.
     * ``QUERY_API_KEY`` unset: only ``APP_ENV=local`` stays open; any other
@@ -121,6 +145,7 @@ def _authorize_query(request: Request, collection_id: str | None) -> None:
       or equal the default ``COLLECTION`` when that list is unset.
     """
     expected = os.getenv("QUERY_API_KEY", "")
+    trusted = bool(expected)
     if expected:
         provided = request.headers.get("x-api-key", "")
         if not hmac.compare_digest(provided.encode("utf-8"), expected.encode("utf-8")):
@@ -135,6 +160,7 @@ def _authorize_query(request: Request, collection_id: str | None) -> None:
             allowed = {get_settings().collection}
         if collection_id not in allowed:
             raise _deny(403, "Collection is not available.")
+    return trusted
 
 
 def create_app(answerer=None, searcher=None):
@@ -165,8 +191,8 @@ def create_app(answerer=None, searcher=None):
     )
     def search(body: AskRequest, request: Request, response: Response):
         """Vector-only retrieval: source text and vector scores, with no reranking or LLM call."""
-        _authorize_query(request, body.collection_id)
-        _check_rate_limit(request)
+        trusted = _authorize_query(request, body.collection_id)
+        _check_rate_limit(request, trusted)
         request_id = str(uuid4())
         response.headers["X-Request-Id"] = request_id
         try:
@@ -200,8 +226,8 @@ def create_app(answerer=None, searcher=None):
     )
     def ask(body: AskRequest, request: Request, response: Response):
         """Run the same vector search as /search, then synthesize a cited answer. No reranking."""
-        _authorize_query(request, body.collection_id)
-        _check_rate_limit(request)
+        trusted = _authorize_query(request, body.collection_id)
+        _check_rate_limit(request, trusted)
         # Blocking provider calls run in FastAPI's thread pool.
         request_id, started = str(uuid4()), time.monotonic()
         response.headers["X-Request-Id"] = request_id

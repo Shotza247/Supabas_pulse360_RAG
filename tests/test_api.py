@@ -162,6 +162,49 @@ def test_query_collection_defaults_to_configured_collection(monkeypatch):
     assert c.post("/ask", json=bad_body, headers=headers).status_code == 403
 
 
+def _ask_from(c, ip, key="query-key", forwarded=True):
+    headers = {"X-API-Key": key} if key else {}
+    if forwarded and ip:
+        headers["X-Forwarded-Client-IP"] = ip
+    return c.post("/ask", json={"question": "hello"}, headers=headers)
+
+
+def test_rate_limit_is_per_forwarded_visitor_when_trusted(monkeypatch):
+    monkeypatch.setenv("QUERY_API_KEY", "query-key")
+    c = _query_client()
+    for _ in range(_RATE_LIMIT):
+        assert _ask_from(c, "203.0.113.10").status_code == 200
+    # Visitor A is now limited, but visitor B (same Render server) is not.
+    assert _ask_from(c, "203.0.113.10").status_code == 429
+    assert _ask_from(c, "203.0.113.11").status_code == 200
+
+
+def test_forwarded_ip_ignored_without_valid_key(monkeypatch):
+    monkeypatch.delenv("QUERY_API_KEY", raising=False)
+    monkeypatch.setenv("APP_ENV", "local")
+    c = _query_client()
+    # Open local mode is untrusted: rotating the forwarded header must not dodge the limit.
+    for i in range(_RATE_LIMIT):
+        assert _ask_from(c, f"203.0.113.{i + 1}", key=None).status_code == 200
+    assert _ask_from(c, "203.0.113.200", key=None).status_code == 429
+
+
+def test_invalid_forwarded_ip_falls_back_to_peer(monkeypatch):
+    monkeypatch.setenv("QUERY_API_KEY", "query-key")
+    c = _query_client()
+    for i in range(_RATE_LIMIT):
+        assert _ask_from(c, "not-an-ip").status_code == 200
+    assert _ask_from(c, "also-bad").status_code == 429
+
+
+def test_missing_forwarded_ip_falls_back_to_peer(monkeypatch):
+    monkeypatch.setenv("QUERY_API_KEY", "query-key")
+    c = _query_client()
+    for _ in range(_RATE_LIMIT):
+        assert _ask_from(c, None).status_code == 200
+    assert _ask_from(c, None).status_code == 429
+
+
 def test_service_errors_documented():
     schema = client().get("/openapi.json").json()
     for path in ("/search", "/ask"):
