@@ -16,6 +16,7 @@ class Settings:
     allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5500"
     supabase_database_url: str = ""
     collection: str = "faq_documents"
+    embedding_provider: str = "huggingface"
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     embedding_revision: str = "main"
     vector_dimensions: int = 384
