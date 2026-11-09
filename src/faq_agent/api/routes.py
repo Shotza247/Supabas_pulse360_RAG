@@ -1,4 +1,6 @@
+import hmac
 import logging
+import os
 import time
 from uuid import uuid4
 
@@ -105,6 +107,36 @@ def _check_rate_limit(request: Request) -> str:
     return ip
 
 
+def _deny(status: int, message: str) -> HTTPException:
+    return HTTPException(status, detail={"message": message, "request_id": ""})
+
+
+def _authorize_query(request: Request, collection_id: str | None) -> None:
+    """Gate the public-facing /ask and /search routes.
+
+    * ``QUERY_API_KEY`` set: the caller must send it as ``X-API-Key``.
+    * ``QUERY_API_KEY`` unset: only ``APP_ENV=local`` stays open; any other
+      environment fails closed so a missing variable never exposes the API.
+    * The target collection must be in ``PUBLIC_COLLECTIONS`` (comma separated),
+      or equal the default ``COLLECTION`` when that list is unset.
+    """
+    expected = os.getenv("QUERY_API_KEY", "")
+    if expected:
+        provided = request.headers.get("x-api-key", "")
+        if not hmac.compare_digest(provided.encode("utf-8"), expected.encode("utf-8")):
+            raise _deny(401, "Query API key required.")
+    elif os.getenv("APP_ENV", "local") != "local":
+        raise _deny(401, "Query API key required.")
+
+    if collection_id:
+        configured = os.getenv("PUBLIC_COLLECTIONS", "")
+        allowed = {c.strip() for c in configured.split(",") if c.strip()}
+        if not allowed:
+            allowed = {get_settings().collection}
+        if collection_id not in allowed:
+            raise _deny(403, "Collection is not available.")
+
+
 def create_app(answerer=None, searcher=None):
     app = FastAPI(title="FAQ Document RAG", version="0.2.0")
     app.include_router(library_router)
@@ -133,6 +165,7 @@ def create_app(answerer=None, searcher=None):
     )
     def search(body: AskRequest, request: Request, response: Response):
         """Vector-only retrieval: source text and vector scores, with no reranking or LLM call."""
+        _authorize_query(request, body.collection_id)
         _check_rate_limit(request)
         request_id = str(uuid4())
         response.headers["X-Request-Id"] = request_id
@@ -167,6 +200,7 @@ def create_app(answerer=None, searcher=None):
     )
     def ask(body: AskRequest, request: Request, response: Response):
         """Run the same vector search as /search, then synthesize a cited answer. No reranking."""
+        _authorize_query(request, body.collection_id)
         _check_rate_limit(request)
         # Blocking provider calls run in FastAPI's thread pool.
         request_id, started = str(uuid4()), time.monotonic()
