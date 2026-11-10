@@ -29,6 +29,7 @@ where = ["src"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+markers = ["live: hits real OpenAI and Supabase; needs RUN_LIVE_TESTS=1"]
 
 [tool.ruff]
 line-length = 100
