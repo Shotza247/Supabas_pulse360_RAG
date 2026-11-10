@@ -28,6 +28,14 @@ class Settings:
     llm_provider: str = "huggingface"
     llm_model: str = ""
     openai_api_key: str = ""
+    # Box sync (all optional; the sync script reports exactly which are missing).
+    box_client_id: str = ""
+    box_client_secret: str = ""
+    box_enterprise_id: str = ""
+    box_developer_token: str = ""  # 60-minute token for a first manual test only
+    box_folder_id: str = ""
+    box_shared_link: str = ""
+    box_collection: str = ""
     request_timeout: int = 30
     context_k: int = 4
     chunk_chars: int = 1000

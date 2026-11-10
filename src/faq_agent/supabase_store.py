@@ -16,6 +16,7 @@ from fastapi import HTTPException
 
 from faq_agent.chunking.chunker import chunk_document
 from faq_agent.embeddings.embedder import build_embedding_client, validate_vectors
+from faq_agent.ingestion.loader import docx_text
 from faq_agent.schemas import SourceDocument
 
 logger = logging.getLogger("faq_agent")
@@ -268,6 +269,56 @@ class SupabaseLibrary:
             cols = [description.name for description in cursor.description]
             return [dict(zip(cols, row, strict=True)) for row in cursor.fetchall()]
 
+    def tracked_documents(
+        self, collection_id: str, source: str, scope: str | None = None
+    ) -> dict[str, dict]:
+        """Map external file id -> {document_id, version} for one synced source.
+
+        Only documents committed with matching ``external_source`` (and, when given,
+        ``external_scope``) metadata are returned, so manual uploads, other sources
+        and other synced folders are never returned and therefore never pruned.
+        """
+        with self.connection() as connection:
+            if "metadata" not in self.columns(connection, "documents"):
+                raise HTTPException(
+                    500, "rag.documents has no metadata column; external sync cannot track files"
+                )
+            cursor = connection.cursor()
+            # The cast keeps this working whether metadata is jsonb, json or text.
+            sql = (
+                "select id, (metadata::jsonb)->>'external_id', "
+                "(metadata::jsonb)->>'external_version' "
+                "from rag.documents where collection_id=%s and status='COMMITTED' "
+                "and (metadata::jsonb)->>'external_source'=%s"
+            )
+            params: tuple = (collection_id, source)
+            if scope is not None:
+                sql += " and (metadata::jsonb)->>'external_scope'=%s"
+                params += (scope,)
+            cursor.execute(sql, params)
+            return {
+                row[1]: {"document_id": str(row[0]), "version": row[2]}
+                for row in cursor.fetchall()
+                if row[1]
+            }
+
+    def delete_document(self, collection_id: str, document_id: str) -> bool:
+        """Delete one document and its chunks atomically; False if it is not in the collection."""
+        with (
+            self.connection() as connection,
+            connection.transaction(),
+            connection.cursor() as cursor,
+        ):
+            cursor.execute(
+                "select 1 from rag.documents where id=%s and collection_id=%s",
+                (document_id, collection_id),
+            )
+            if cursor.fetchone() is None:
+                return False
+            cursor.execute("delete from rag.document_chunks where document_id=%s", (document_id,))
+            cursor.execute("delete from rag.documents where id=%s", (document_id,))
+        return True
+
     # ------------------------------------------------------------------ #
     # Upload workflow: preview → commit                                    #
     # ------------------------------------------------------------------ #
@@ -276,8 +327,8 @@ class SupabaseLibrary:
         self.require_collection(collection_id)
         filename = Path(filename.replace("\\", "/")).name[:160]
         suffix = Path(filename).suffix.lower()
-        if suffix not in {".pdf", ".txt", ".md"}:
-            raise HTTPException(415, "Supported files: PDF, TXT and Markdown")
+        if suffix not in {".pdf", ".txt", ".md", ".docx"}:
+            raise HTTPException(415, "Supported files: PDF, DOCX, TXT and Markdown")
         if not data or len(data) > MAX_BYTES:
             raise HTTPException(413, "Upload must be nonempty and at most 10 MB")
 
@@ -290,6 +341,8 @@ class SupabaseLibrary:
                     (index + 1, page.extract_text() or "")
                     for index, page in enumerate(reader.pages)
                 ]
+            elif suffix == ".docx":
+                pages = [(None, docx_text(data))]
             else:
                 pages = [(None, data.decode("utf-8-sig"))]
             digest = hashlib.sha256(data).hexdigest()
@@ -314,7 +367,7 @@ class SupabaseLibrary:
         except Exception as exc:
             raise HTTPException(
                 422,
-                "Cannot preview this file; use a readable PDF, TXT, or Markdown document",
+                "Cannot preview this file; use a readable PDF, DOCX, TXT, or Markdown document",
             ) from exc
 
         # ── Persist preview in Supabase so it survives restarts ──
@@ -351,7 +404,14 @@ class SupabaseLibrary:
             "expires_in_seconds": _PREVIEW_TTL,
         }
 
-    def commit(self, collection_id: str, token: str, approved: bool, category: str = "platform"):
+    def commit(
+        self,
+        collection_id: str,
+        token: str,
+        approved: bool,
+        category: str = "platform",
+        metadata: dict | None = None,
+    ):
         if not approved:
             raise HTTPException(422, "Approve hosted processing before embedding")
 
@@ -455,7 +515,9 @@ class SupabaseLibrary:
                         "content_hash": preview["digest"],
                         "embedding_model": self.s.embedding_model,
                         "embedding_dimensions": self.s.vector_dimensions,
-                        "metadata": json.dumps({"source": "fastapi_upload"}),
+                        # Integrations (e.g. the Box sync) pass extra keys here so a
+                        # document can later be matched back to its external source.
+                        "metadata": json.dumps({"source": "fastapi_upload", **(metadata or {})}),
                     }
                     doc_cols = [c for c in doc_values if c in document_columns]
                     with connection.cursor() as cursor:
