@@ -1,4 +1,4 @@
-﻿from dataclasses import replace
+from dataclasses import replace
 from unittest.mock import Mock, patch
 
 import pytest
