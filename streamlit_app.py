@@ -133,7 +133,7 @@ def main() -> None:
     documents_tab, questions_tab = st.tabs(["Documents", "Questions"])
     with documents_tab:
         st.subheader("Upload document")
-        upload = st.file_uploader("PDF, TXT, or Markdown", type=["pdf", "txt", "md"])
+        upload = st.file_uploader("PDF, DOCX, TXT, or Markdown", type=["pdf", "docx", "txt", "md"])
         data = upload.getvalue() if upload else None
         if upload and st.button("Preview chunks", icon=":material/preview:"):
             try:
