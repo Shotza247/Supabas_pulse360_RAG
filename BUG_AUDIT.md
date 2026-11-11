@@ -348,10 +348,25 @@ audit matches the code. Each links to its commit; details are in the commit mess
 **Test status (2026-11-09):** before the `conftest.py` isolation fixture existed, running
 the suite with the real `.env` database URL took about 7.5 minutes and failed 5
 rate-limit tests in `tests/test_api.py`, because `rate_limiter.check()` reached the real
-database. With the fixture in place, six consecutive runs (excluding
-`tests/test_streamlit_ui.py`) gave 112 passed, 4 skipped in 6-10 s, except one run that
-gave 111 passed, 1 failed (`test_query_routes_fail_closed_outside_local`, "Production
-services require HTTPS" from `get_settings()` under `APP_ENV=production`). That failure
-was seen twice, before the fixture existed and once after, and did not recur in five
-later runs. The cause was not established; both URLs in the local `.env` are HTTPS.
-Treat that test as possibly order- or environment-dependent.
+database. With the fixture in place, runs (excluding `tests/test_streamlit_ui.py`) gave
+112 passed, 4 skipped in 6-10 s, apart from the two intermittent failures below.
+
+**Intermittent failures investigated (2026-11-11):**
+
+1. `test_query_routes_fail_closed_outside_local` ("Production services require HTTPS",
+   seen twice). Reproduced deterministically: `Settings.embedding_url` defaults to `""`,
+   and under `APP_ENV=production` any URL not starting with `https://` is rejected, so
+   the test fails whenever `EMBEDDING_URL` is not supplied by the environment or a
+   `.env` (a clean checkout or CI would always fail). The test did not set it. Fixed by
+   setting `EMBEDDING_URL` and `LLM_BASE_URL` to HTTPS values inside the test. Not
+   confirmed: why it failed on a machine whose `.env` has both URLs as HTTPS. The two
+   original failures are therefore not proven to be this cause, only the one mechanism
+   found that produces the same error. It passed in 7 consecutive runs afterwards.
+2. `test_rate_limit_is_per_forwarded_visitor_when_trusted` (one failure in a full run,
+   passed alone). Likely cause (mechanism reproduced; not proven for the one real
+   occurrence): `rate_limiter._current_window()` reads the wall clock, so when
+   a 60-second boundary passes during a test that sends more than 30 requests, the
+   counter resets and the expected 429 comes back as 200. Reproduced by advancing a fake
+   clock 3 s per call: 5 tests in `tests/test_api.py` failed. Fixed by pinning
+   `_current_window` in the autouse fixture in `tests/conftest.py`; the same forced-boundary
+   run then passed 25/25. Test-only change; `rate_limiter.py` is unchanged.

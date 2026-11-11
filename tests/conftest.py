@@ -7,14 +7,19 @@ from faq_agent.rate_limiter import clear_local
 
 
 @pytest.fixture(autouse=True)
-def clear_rate_counters():
+def clear_rate_counters(monkeypatch):
     """Reset the in-process rate-limit counter before every test.
 
     The counter lives in rate_limiter._local_counters.  The alias
     _rate_counters in routes.py points to the same object so both modules
     stay in sync.  Tests run without a live DB so the local fallback path
     is always used.
+
+    The window is pinned too. It is derived from the wall clock, so a test that sends
+    more than the limit (31 requests) failed whenever a 60-second boundary passed
+    mid-test: the counter reset and the expected 429 came back as 200.
     """
+    monkeypatch.setattr("faq_agent.rate_limiter._current_window", lambda: 1)
     clear_local()
     yield
     clear_local()
