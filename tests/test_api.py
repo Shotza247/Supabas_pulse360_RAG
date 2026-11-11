@@ -113,6 +113,10 @@ def test_query_routes_open_in_local_without_key(monkeypatch):
 def test_query_routes_fail_closed_outside_local(monkeypatch):
     monkeypatch.delenv("QUERY_API_KEY", raising=False)
     monkeypatch.setenv("APP_ENV", "production")
+    # Settings rejects non-HTTPS service URLs outside local, and EMBEDDING_URL defaults
+    # to "". Set both so the test does not depend on what a developer's .env contains.
+    monkeypatch.setenv("EMBEDDING_URL", "https://embeddings.example.test")
+    monkeypatch.setenv("LLM_BASE_URL", "https://llm.example.test/v1")
     c = _query_client()
     assert c.post("/ask", json={"question": "hello"}).status_code == 401
     assert c.post("/search", json={"question": "hello"}).status_code == 401
