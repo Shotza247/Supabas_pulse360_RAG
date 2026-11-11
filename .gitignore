@@ -18,3 +18,4 @@ data/private/*
 !data/private/.gitkeep
 data/public/*
 !data/public/.gitkeep
+.vercel

@@ -134,21 +134,24 @@ def synthesize(question, matches, settings):
         {k: m[k] for k in _LLM_EVIDENCE_FIELDS if k in m}
         for m in matches
     ]
+    payload = {
+        "model": settings.llm_model,
+        "temperature": 0,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": json.dumps({"question": question, "evidence": evidence}),
+            },
+        ],
+    }
+    # OpenAI's newer models (gpt-5.x) reject max_tokens; max_completion_tokens is
+    # accepted by every current OpenAI chat model. Other providers keep max_tokens.
+    payload["max_completion_tokens" if settings.llm_provider == "openai" else "max_tokens"] = 700
     response = _post_with_retry(
         settings.llm_base_url.rstrip("/") + "/chat/completions",
         headers={"Authorization": auth},
-        payload={
-            "model": settings.llm_model,
-            "temperature": 0,
-            "max_tokens": 700,
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": json.dumps({"question": question, "evidence": evidence}),
-                },
-            ],
-        },
+        payload=payload,
         timeout=settings.request_timeout,
     )
     raw = response.json()["choices"][0]["message"]["content"]

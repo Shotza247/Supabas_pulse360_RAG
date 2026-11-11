@@ -1,0 +1,47 @@
+name: Box sync
+
+# Keeps the Supabase collection in step with Box. Disabled until the repository
+# variable BOX_SYNC_ENABLED is set to "true" (Settings > Secrets and variables >
+# Actions > Variables), so merging this file never starts syncing by itself.
+on:
+  schedule:
+    - cron: "17 * * * *" # hourly, off the top of the hour
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Report changes without writing"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: box-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: ${{ vars.BOX_SYNC_ENABLED == 'true' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      EMBEDDING_URL: ${{ secrets.EMBEDDING_URL }}
+      BOX_CLIENT_ID: ${{ secrets.BOX_CLIENT_ID }}
+      BOX_CLIENT_SECRET: ${{ secrets.BOX_CLIENT_SECRET }}
+      BOX_ENTERPRISE_ID: ${{ secrets.BOX_ENTERPRISE_ID }}
+      BOX_FOLDER_ID: ${{ vars.BOX_FOLDER_ID }}
+      BOX_SHARED_LINK: ${{ secrets.BOX_SHARED_LINK }}
+      BOX_COLLECTION: ${{ vars.BOX_COLLECTION }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install dependencies
+        run: uv sync --frozen
+      - name: Sync Box
+        # Scheduled runs always write; manual runs default to a dry run.
+        run: >-
+          uv run python scripts/sync_box.py
+          ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '--dry-run' || '' }}

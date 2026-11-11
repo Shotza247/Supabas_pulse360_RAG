@@ -18,6 +18,7 @@ from typing import Any
 from faq_agent.chunking.chunker import chunk_document
 from faq_agent.config import get_settings
 from faq_agent.embeddings.embedder import build_embedding_client
+from faq_agent.ingestion.loader import docx_text
 from faq_agent.schemas import SourceDocument
 from faq_agent.supabase_store import _register_vector_dumper
 
@@ -84,7 +85,9 @@ def parse_upload(filename: str, data: bytes) -> str:
 
         reader = PdfReader(io.BytesIO(data))
         return "\n\n".join(page.extract_text() or "" for page in reader.pages)
-    raise ValueError("Use a PDF, TXT, or Markdown document.")
+    if suffix == ".docx":
+        return docx_text(data)
+    raise ValueError("Use a PDF, DOCX, TXT, or Markdown document.")
 
 
 def build_chunks(filename: str, text: str, *, test_document: bool = True):

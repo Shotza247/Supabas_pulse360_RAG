@@ -8,9 +8,12 @@ retrieval module uses `SupabaseLibrary` for all storage operations.
 The hosted LLM client generates answers and validates citation IDs against the
 retrieved evidence. Prompts are separate from client transport code.
 
-The ingestion service owns the upload lifecycle. The loader is used by the CLI
-corpus workflow; UI PDF extraction is page-aware. Both use the same chunker and
-embedding client.
+`SupabaseLibrary` (`supabase_store.py`) owns the upload lifecycle: preview, approval
+and commit. `ingestion/loader.py` reads local files and extracts `.docx` text
+(`docx_text()`, which also serves uploads); PDF extraction in the upload path is
+page-aware. All paths use the same chunker and embedding client.
+`rate_limiter.py` holds the request limiter and `db_helpers.py` the direct-PostgreSQL
+helpers shared by the two Streamlit pages.
 
 ```mermaid
 sequenceDiagram
@@ -23,7 +26,7 @@ sequenceDiagram
     A->>S: Extract and chunk locally, persist preview row
     S-->>U: Preview ID, text, pages and dimensions
     U->>A: Approve preview, embed and store
-    A->>S: Load preview (id AND collection_id), duplicate check (checksum/content_hash/sha256)
+    A->>S: Load preview (id AND collection_id), duplicate check (sha256/checksum/content_hash)
     Note over A,S: Embedding API is NOT called for duplicates
     A->>E: Approved chunk text (new documents only)
     E-->>A: Validated vectors
@@ -42,17 +45,20 @@ sequenceDiagram
 ## Data and configuration
 
 - Supabase (`rag` schema): all persistent state — collections, documents, chunk
-  embeddings (pgvector), and expiring upload previews (`rag.previews`).  Run
-  `docs/migrations/001_add_rag_previews.sql` once before deploying.
+  embeddings (pgvector), expiring upload previews (`rag.previews`) and rate-limit
+  counters (`rag.rate_limits`). Run the files in `docs/migrations/` before deploying.
 - `.env`: private runtime settings. `.env.example`: supported keys and defaults.
-  `config.py` validates settings at startup. Existing retired keys in a private
-  `.env` are ignored.
-- Embedding model, revision, dimensions, prefixes and chunk configuration determine
-  the collection fingerprint. Changing this profile requires a new index.
+  `config.py` validates settings at startup and coerces environment values to the
+  declared field types (int/float/str). Existing retired keys in a private `.env`
+  are ignored. Outside `APP_ENV=local`, `EMBEDDING_URL` and `LLM_BASE_URL` must be HTTPS.
+- Embedding provider, model, revision, dimensions, prefixes and chunk configuration
+  determine the collection fingerprint. Changing this profile requires a new index.
   The LLM model can change without re-embedding documents.
-- Default embedding model: `BAAI/bge-small-en-v1.5`, 384 dimensions. The hosted
-  URL must actually serve that model. Answer model selection is configurable via
-  `LLM_MODEL`; provider access and credits must be checked separately.
+- Default embedding: `EMBEDDING_PROVIDER=huggingface`, model `BAAI/bge-small-en-v1.5`,
+  384 dimensions. `EMBEDDING_PROVIDER=openai` is also supported; vectors are shortened
+  to `VECTOR_DIMENSIONS`. The hosted URL must actually serve the configured model.
+  Answer model selection is configurable via `LLM_MODEL`; provider access and credits
+  must be checked separately.
 
 ## Contracts
 
@@ -60,6 +66,13 @@ Both `/search` and `/ask` accept `question`, optional `collection_id`, and optio
 `document_id`. Document scope requires collection scope. `/ask` calls the shared
 Python retrieval function, not the `/search` HTTP route. Empty retrieval skips the
 LLM.
+
+Access control: `/search` and `/ask` require `QUERY_API_KEY` as `X-API-Key`. With the
+key unset, only `APP_ENV=local` stays open; any other environment fails closed with
+401. A requested `collection_id` must be in `PUBLIC_COLLECTIONS` (default: the
+configured `COLLECTION`), otherwise 403. The `/collections` routes use a separate
+`ADMIN_API_KEY` and stay locked when it is unset. Responses carry an `X-Request-Id`
+header.
 
 The UI only lists application-managed collections. Omitting `collection_id` selects
 the configured default collection.
@@ -89,11 +102,18 @@ response citations by `validate_answer()` after the LLM call returns.
 
 Only committed documents are searchable.
 
+Uploads accept PDF, DOCX, TXT and Markdown (10 MB). A `.docx` is a zip archive, so
+`docx_text()` rejects archives whose uncompressed size exceeds 50 MB before parsing,
+and includes table rows in document order.
+
 Rate limiting applies to `/search` and `/ask`: 30 requests per IP per 60-second
 window. The counter is stored in `rag.rate_limits` (Supabase) so it is shared
-across all Vercel serverless invocations and Gunicorn workers. Falls back to an
-in-process counter when no database URL is configured (tests, local dev).
-Requests over the limit receive HTTP 429 before any embedding or DB work begins.
+across all Vercel serverless invocations and Gunicorn workers. It falls back to an
+in-process counter when no database URL is configured (tests, local dev) or when
+the database call fails. The limited IP is the socket peer, unless the caller
+authenticated with `QUERY_API_KEY`, in which case a valid `X-Forwarded-Client-IP`
+names the real visitor (Pulse360 calls this API from its own server). Requests over
+the limit receive HTTP 429 before any embedding or DB work begins.
 
 The shared `SupabaseLibrary` instance is cached via `lru_cache` on the frozen
 `Settings` key. Connections are opened per operation; this does not create a
@@ -128,13 +148,12 @@ Similarity scores are not confidence estimates. Citation validation checks that
 IDs exist in the evidence; factual quality needs evaluation. There is no active
 reranking, conversational memory, Drive sync or monitoring stack.
 
-The rate limiter uses `rag.rate_limits` in Supabase — shared across workers.
-The deleted Chroma and SQLite files (#11, #12) are not present in the current
-codebase.
+Chroma and SQLite code (findings #11, #12) was removed and is not in the
+current codebase.
 
 LLM synthesis supports `huggingface` (dev/sandbox) and `openai` (production).
 Switch providers by updating `LLM_PROVIDER`, `LLM_BASE_URL`, `LLM_MODEL`, and
 the corresponding API key in `.env`.
 
-**All tracked code-review findings are now resolved.** See `BUG_AUDIT.md` and the
-code-review HTML artifact for the full record.
+All tracked code-review findings are resolved. See `BUG_AUDIT.md` and the
+code-review HTML artifact for the record.

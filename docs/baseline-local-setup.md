@@ -1,86 +1,80 @@
-# FAQ RAG Workspace
+# Local setup and project layout
 
-A local document workspace: create a collection, upload a document, review chunks,
-approve hosted embeddings, then search or ask questions with source citations.
-FastAPI serves the backend, Streamlit is the test UI, Qdrant stores vectors, and
-Hugging Face hosts embedding and answer models.
-SQLite tracks document ingestion.
+A document workspace backed by Supabase PostgreSQL + pgvector: create a collection,
+upload a document, review chunks, approve hosted embeddings, then search or ask
+questions with source citations. FastAPI serves the backend, Streamlit is the test
+UI, and a hosted provider (Hugging Face by default, OpenAI optional) supplies
+embeddings and answers.
 
 ## Project structure
 
 ```text
-OpenSource-RAG-Template/
-  README.md
-  pyproject.toml              # Dependencies and tool settings
-  uv.lock                    # Reproducible dependency resolution
-  .env.example               # Configuration reference, without secrets
-  .env                       # Private local configuration; ignored by Git
-  main.py                    # FastAPI entry point
-  streamlit_app.py            # UI entry point
-  docker-compose.yml         # Local Qdrant; optional Chroma profile
-  Dockerfile                 # API container definition
-  src/faq_agent/
-    config.py                # Validated settings and project paths
-    schemas.py               # Document, chunk and retrieval data types
-    ingestion/
-      loader.py              # Read documents for CLI ingestion
-      service.py             # Reviewed upload, catalog and storage lifecycle
-    chunking/chunker.py       # Section-aware character windows
-    embeddings/embedder.py   # Hosted embedding client and vector validation
-    vectordb/vector_store.py # Qdrant and optional Chroma adapters
-    retrieval/retriever.py   # Shared search and answer workflow
-    prompts/templates.py     # Grounding instructions and abstention text
-    llm/client.py            # Hosted synthesis and citation validation
-    api/
-      routes.py              # Health, search and ask
-      documents.py           # Collection and upload endpoints
-  scripts/                   # Environment setup, CLI ingestion, evaluation
-  tests/                     # Offline unit, integration and UI tests
-  examples/                  # Synthetic demo and FAQ source files
-  docs/
-    architecture.md          # Responsibilities, data flow, limitations
-    ui-testing.md            # Upload workflow and API reference
-    testing.md               # Automated and live verification
-  BUG_AUDIT.md               # Concise current verification/recovery record
-  .local/                    # Ignored SQLite catalog, logs and local backups
+README.md
+pyproject.toml                # Dependencies and tool settings
+uv.lock                       # Reproducible dependency resolution
+.env.example                  # Configuration reference, without secrets
+.env                          # Private local configuration; ignored by Git
+main.py                       # FastAPI entry point (also the Vercel entry, see vercel.json)
+streamlit_app.py              # Production workspace UI
+supabase_pgvector_test.py     # Smoke-test UI for the rag schema
+src/faq_agent/
+  config.py                   # Validated, type-coerced settings
+  schemas.py                  # Document, chunk and retrieval data types
+  supabase_store.py           # SupabaseLibrary: preview, approve, commit, search
+  db_helpers.py               # Direct-PostgreSQL helpers shared by both Streamlit pages
+  rate_limiter.py             # Per-IP limiter (rag.rate_limits, in-process fallback)
+  ingestion/loader.py         # Local file loading and .docx text extraction
+  integrations/               # Box source and sync (see box-sync.md)
+  chunking/chunker.py         # Section-aware character windows
+  embeddings/embedder.py      # Hosted embedding client and vector validation
+  retrieval/retriever.py      # Shared search and answer workflow
+  prompts/templates.py        # Grounding instructions and abstention text
+  llm/client.py               # Hosted synthesis and citation validation
+  api/
+    routes.py                 # Health, search and ask
+    documents.py              # Collection and upload endpoints
+scripts/                      # Environment setup, retrieval evaluation, Box sync, test-data cleanup
+tests/                        # Offline unit, integration and UI tests
+docs/
+  architecture.md             # Responsibilities, data flow, contracts, limitations
+  ui-testing.md               # Upload workflow and API reference
+  testing.md                  # Automated and live verification
+  supabase-pgvector-smoke-test.md
+  box-sync.md                 # Optional Box-to-Supabase document sync
+  migrations/                 # SQL to run against Supabase before deployment
+BUG_AUDIT.md                  # Verification, recovery and fix record
 ```
 
-Each Python package contains an `__init__.py`. 
-Dependencies live in pyproject.toml and uv.lock; no duplicate requirements.txt is maintained.
-Settings live in config.py and .env; no second YAML configuration layer is needed.
-```
-Only add utility modules when there is shared logic to put in them😉.
-```
+Dependencies live in `pyproject.toml` and `uv.lock`; no `requirements.txt` is
+maintained. Settings live in `config.py` and `.env`.
 
 ## Run locally
 
-Requires Python 3.11-3.13, uv and Docker for Qdrant.
+Requires Python 3.11-3.13 and uv. There is no local vector database or container:
+all state is in your Supabase project.
 
 ```powershell
 uv sync --locked --extra dev --extra ui
-.\.venv\Scripts\python.exe scripts/setup_env.py --sync
-.\.venv\Scripts\python.exe scripts/setup_env.py --token
-docker compose up -d qdrant
+uv run python scripts/setup_env.py --sync
+uv run python scripts/setup_env.py --token
 ```
 
-The setup script backs up an existing .env before merging current keys; it preserves
-configured values and never prints credentials. 
-Set EMBEDDING_URL, HF_TOKEN and LLM_MODEL privately. 
-VECTOR_URL must match QDRANT_PORT (this machine uses 6334; the template defaults to 6333).
-Existing configured values need not be reset.
+The setup script backs up an existing `.env` before merging current keys; it
+preserves configured values and never prints credentials. Set
+`SUPABASE_DATABASE_URL`, `ADMIN_API_KEY`, `EMBEDDING_URL`, `HF_TOKEN` and `LLM_MODEL`
+privately, and run the SQL files in `docs/migrations/` once.
 
-Start each server in a separate terminal from this folder:
+Start each server in a separate terminal from the repository root:
 
 ```powershell
-.\.venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8767
+uv run uvicorn main:app --host 127.0.0.1 --port 8767
 ```
 
 ```powershell
-.\.venv\Scripts\python.exe -m streamlit run streamlit_app.py --server.address 127.0.0.1 --server.port 8502 --server.maxUploadSize 10 --browser.gatherUsageStats false
+uv run streamlit run streamlit_app.py --server.address 127.0.0.1 --server.port 8502 --server.maxUploadSize 10 --browser.gatherUsageStats false
 ```
 
 Open [Streamlit](http://127.0.0.1:8502) or [Swagger](http://127.0.0.1:8767/docs).
-The previous `faq_agent.api:app` entry point still works.
 Restart the API after changing settings. `FAQ_API_URL` overrides the UI's API address.
 
 ## Workflow
@@ -91,14 +85,14 @@ flowchart LR
     Collection --> Upload[Upload document]
     Upload --> Preview[Local extraction and chunk preview]
     Preview --> Approve[Explicit approval]
-    Approve --> Embed[Hosted HF embeddings]
-    Embed --> Q[(Qdrant)]
+    Approve --> Embed[Hosted embeddings]
+    Embed --> DB[(Supabase pgvector)]
     UI --> Query[Question and collection scope]
     Query --> Search[Shared vector search]
-    Search --> Q
+    Search --> DB
     Search --> Evidence[Chunks and vector scores]
     Evidence --> Result[Search response]
-    Evidence --> LLM[Hosted HF synthesis]
+    Evidence --> LLM[Hosted synthesis]
     LLM --> Answer[Answer and validated citations]
 ```
 
@@ -107,22 +101,12 @@ the configured embedding endpoint. Search embeds the question; Ask uses the same
 retrieval function and then generates an answer. Reranking is not currently used;
 the compatibility response field `rerank_score` is null.
 
-The existing synthetic `ui_smoke_test` collection can answer "What does Project
-Atlas show?". For your FAQ, select or create `pulse360_faq`, upload the document,
-review chunks, approve, then store. The original `embedding_demo-bd228c87eb28`
-collection remains accessible through requests without collection_id.
-
 ## Verification and boundaries
 
-Verified locally on 2026-09-15: all 55 tests and lint passed. After restart,
-collection-scoped search/answer and the original demo search passed live checks;
-existing collection identities and document counts were unchanged.
+- [Tests and evaluation](testing.md)
+- [Architecture and configuration](architecture.md)
+- [UI workflow and endpoint reference](ui-testing.md)
 
-- [Tests and evaluation](docs/testing.md)
-- [Architecture and configuration](docs/architecture.md)
-- [UI workflow and endpoint reference](docs/ui-testing.md)
-
-This is a single-user local MVP. Keep servers on loopback. No authentication,
-background ingestion, OCR or production deployment is implemented. Preserve
-both the Qdrant volume and `.local/library.sqlite3`. Hosted model usage may consume
-credits; the application does not enforce provider billing caps.
+Keep local servers on loopback. The document-library API uses a shared admin key,
+not per-user authorization. There is no OCR or background ingestion. Hosted model
+usage may consume credits; the application does not enforce provider billing caps.

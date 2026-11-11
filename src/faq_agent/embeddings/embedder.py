@@ -105,5 +105,61 @@ class HFEmbeddingClient:
         return self._embed([self.settings.embedding_query_prefix + text])[0]
 
 
-def build_embedding_client(settings) -> HFEmbeddingClient:
-    return HFEmbeddingClient(settings)
+# OpenAI accepts up to 2048 inputs per request; 100 covers a full upload in one call.
+_OPENAI_BATCH = 100
+
+
+class OpenAIEmbeddingClient:
+    """OpenAI /v1/embeddings, shortened to VECTOR_DIMENSIONS so vectors fit the pgvector column.
+
+    EMBEDDING_URL is the full endpoint (https://api.openai.com/v1/embeddings) and
+    EMBEDDING_MODEL the model name. The bge query/document prefixes are model-specific
+    and are not applied here.
+    """
+
+    def __init__(self, settings):
+        self.settings = settings
+        self.dimensions = settings.vector_dimensions
+
+    def _embed(self, texts: list[str]) -> list[list[float]]:
+        if not texts:
+            return []
+        if not self.settings.embedding_url or not self.settings.openai_api_key:
+            raise ValueError("Configure EMBEDDING_URL and OPENAI_API_KEY for OpenAI embeddings")
+        vectors: list[list[float]] = []
+        for offset in range(0, len(texts), _OPENAI_BATCH):
+            batch = texts[offset : offset + _OPENAI_BATCH]
+            response = _post_with_retry(
+                self.settings.embedding_url,
+                headers={"Authorization": f"Bearer {self.settings.openai_api_key}"},
+                payload={
+                    "model": self.settings.embedding_model,
+                    "input": batch,
+                    "dimensions": self.dimensions,
+                },
+                timeout=self.settings.request_timeout,
+            )
+            data = sorted(response.json()["data"], key=lambda item: item["index"])
+            vectors.extend(
+                validate_vectors([item["embedding"] for item in data], len(batch), self.dimensions)
+            )
+        return vectors
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return self._embed(texts)
+
+    def embed_query(self, text: str) -> list[float]:
+        if not text or not text.strip():
+            raise ValueError("Query text must be non-empty")
+        return self._embed([text])[0]
+
+
+def build_embedding_client(settings) -> EmbeddingClient:
+    if settings.embedding_provider == "huggingface":
+        return HFEmbeddingClient(settings)
+    if settings.embedding_provider == "openai":
+        return OpenAIEmbeddingClient(settings)
+    raise ValueError(
+        f"Unsupported embedding_provider {settings.embedding_provider!r}. "
+        "Set EMBEDDING_PROVIDER to 'huggingface' or 'openai'."
+    )

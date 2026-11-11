@@ -16,6 +16,7 @@ class Settings:
     allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5500"
     supabase_database_url: str = ""
     collection: str = "faq_documents"
+    embedding_provider: str = "huggingface"
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     embedding_revision: str = "main"
     vector_dimensions: int = 384
@@ -27,6 +28,14 @@ class Settings:
     llm_provider: str = "huggingface"
     llm_model: str = ""
     openai_api_key: str = ""
+    # Box sync (all optional; the sync script reports exactly which are missing).
+    box_client_id: str = ""
+    box_client_secret: str = ""
+    box_enterprise_id: str = ""
+    box_developer_token: str = ""  # 60-minute token for a first manual test only
+    box_folder_id: str = ""
+    box_shared_link: str = ""
+    box_collection: str = ""
     request_timeout: int = 30
     context_k: int = 4
     chunk_chars: int = 1000
@@ -56,8 +65,11 @@ class Settings:
         return [x.strip() for x in self.allowed_origins.split(",") if x.strip()]
 
 
-# Type coercion map: field.type is a string under PEP 563 (from __future__ import annotations)
-_COERCE: dict[str, type] = {"int": int, "float": float, "str": str}
+# Type coercion map. field.type is the class itself here (no PEP 563), but is a
+# string under `from __future__ import annotations`, so both forms are keyed.
+# Without the class keys every env value fell back to str and int fields such as
+# CHUNK_OVERLAP failed validation as soon as a .env or Vercel variable set them.
+_COERCE: dict = {int: int, float: float, str: str, "int": int, "float": float, "str": str}
 
 
 @lru_cache

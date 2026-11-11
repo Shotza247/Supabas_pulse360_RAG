@@ -4,7 +4,13 @@ from unittest.mock import Mock, patch
 import pytest
 
 from faq_agent.config import Settings
-from faq_agent.embeddings.embedder import HFEmbeddingClient, _MAX_RETRIES, validate_vectors
+from faq_agent.embeddings.embedder import (
+    _MAX_RETRIES,
+    HFEmbeddingClient,
+    OpenAIEmbeddingClient,
+    build_embedding_client,
+    validate_vectors,
+)
 
 
 @pytest.mark.parametrize(
@@ -79,3 +85,77 @@ def test_embed_raises_after_all_retries_exhausted(monkeypatch):
     with pytest.raises(Exception, match="503"):
         HFEmbeddingClient(s).embed_query("hello")
     assert calls["n"] == _MAX_RETRIES
+
+
+def _openai_settings(**overrides):
+    base = {
+        "embedding_provider": "openai",
+        "embedding_url": "https://api.openai.com/v1/embeddings",
+        "embedding_model": "text-embedding-3-large",
+        "openai_api_key": "sk-test",
+        "vector_dimensions": 2,
+    }
+    return replace(Settings(), **{**base, **overrides})
+
+
+def test_provider_selects_client_and_rejects_unknown():
+    assert isinstance(build_embedding_client(replace(Settings())), HFEmbeddingClient)
+    assert isinstance(build_embedding_client(_openai_settings()), OpenAIEmbeddingClient)
+    with pytest.raises(ValueError, match="Unsupported embedding_provider"):
+        build_embedding_client(replace(Settings(), embedding_provider="nope"))
+
+
+def test_openai_embeddings_payload_order_and_no_prefix(monkeypatch):
+    seen = []
+
+    def post(url, **kwargs):
+        seen.append((url, kwargs["headers"]["Authorization"], kwargs["json"]))
+        n = len(kwargs["json"]["input"])
+        # Return out of order to prove results are re-sorted by "index".
+        items = [{"index": i, "embedding": [float(i + 1), 0.5]} for i in range(n)]
+        return Mock(status_code=200, json=lambda: {"data": list(reversed(items))})
+
+    monkeypatch.setattr("faq_agent.embeddings.embedder.requests.post", post)
+    client = OpenAIEmbeddingClient(_openai_settings())
+    vectors = client.embed_documents(["a", "b", "c"])
+    assert vectors == [[1.0, 0.5], [2.0, 0.5], [3.0, 0.5]]
+    url, auth, payload = seen[0]
+    assert url == "https://api.openai.com/v1/embeddings"
+    assert auth == "Bearer sk-test"
+    assert payload == {"model": "text-embedding-3-large", "input": ["a", "b", "c"], "dimensions": 2}
+    client.embed_query("skills")
+    assert seen[-1][2]["input"] == ["skills"]  # bge query prefix is not applied to OpenAI
+
+
+def test_openai_embeddings_batches_of_100(monkeypatch):
+    sizes = []
+
+    def post(url, **kwargs):
+        n = len(kwargs["json"]["input"])
+        sizes.append(n)
+        return Mock(
+            status_code=200,
+            json=lambda: {"data": [{"index": i, "embedding": [1.0, 1.0]} for i in range(n)]},
+        )
+
+    monkeypatch.setattr("faq_agent.embeddings.embedder.requests.post", post)
+    assert len(OpenAIEmbeddingClient(_openai_settings()).embed_documents(["x"] * 101)) == 101
+    assert sizes == [100, 1]
+
+
+def test_openai_embeddings_require_key_and_url_and_valid_text():
+    with pytest.raises(ValueError, match="OPENAI_API_KEY"):
+        OpenAIEmbeddingClient(_openai_settings(openai_api_key="")).embed_query("hi")
+    with pytest.raises(ValueError, match="EMBEDDING_URL"):
+        OpenAIEmbeddingClient(_openai_settings(embedding_url="")).embed_query("hi")
+    with pytest.raises(ValueError, match="non-empty"):
+        OpenAIEmbeddingClient(_openai_settings()).embed_query("  ")
+
+
+def test_openai_embeddings_reject_wrong_dimension(monkeypatch):
+    def post(url, **kwargs):
+        return Mock(status_code=200, json=lambda: {"data": [{"index": 0, "embedding": [1.0, 2.0, 3.0]}]})
+
+    monkeypatch.setattr("faq_agent.embeddings.embedder.requests.post", post)
+    with pytest.raises(ValueError, match="dimension"):
+        OpenAIEmbeddingClient(_openai_settings()).embed_query("hi")

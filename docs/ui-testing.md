@@ -32,7 +32,7 @@ when the variable is unset.
 
 1. Select an existing collection from `rag.collections`. To create one, use the
    authenticated `POST /collections` API endpoint or create it in Supabase.
-2. Upload a PDF, TXT, or Markdown file and select Preview chunks.
+2. Upload a PDF, DOCX, TXT, or Markdown file and select Preview chunks.
 3. Review the text, page number and chunk count. Preview makes no HF calls.
 4. Approve hosted processing, then select Embed and store. This sends the chunks
    to the configured embedding endpoint and writes vectors/text to Supabase.
@@ -54,8 +54,12 @@ when `collection_id` is omitted.
 | GET | /collections/{id}/documents | List committed documents (`X-API-Key` required) |
 | POST | /collections/{id}/uploads/preview | Multipart `file`; extract and chunk locally (`X-API-Key` required) |
 | POST | /collections/{id}/documents | `preview_id` and `approved:true`; embed/store (`X-API-Key` required) |
-| POST | /search | question, optional collection_id and document_id |
-| POST | /ask | Same retrieval scope, then HF synthesis |
+| POST | /search | question, optional collection_id and document_id (`X-API-Key` = `QUERY_API_KEY`; open only when `APP_ENV=local`) |
+| POST | /ask | Same retrieval scope, then hosted synthesis (same auth as `/search`) |
+
+`/search` and `/ask` only accept collections listed in `PUBLIC_COLLECTIONS`
+(default: `COLLECTION`) and are limited to 30 requests per IP per 60 seconds
+(HTTP 429 beyond that).
 
 ## Boundaries
 
@@ -63,8 +67,10 @@ when `collection_id` is omitted.
   previews. Run the migrations in `docs/migrations/` before deployment.
 - API preview IDs expire after one hour. Expired preview rows are removed when
   a new API preview is created.
-- PDF/TXT/MD only: 10 MB, 100 PDF pages, 100,000 extracted characters and at most
-  100 chunks. Scanned PDFs require OCR elsewhere. PDF extraction is page-by-page.
+- PDF, DOCX, TXT and Markdown only: 10 MB, 100 PDF pages, 100,000 extracted
+  characters and at most 100 chunks. Scanned PDFs require OCR elsewhere. PDF
+  extraction is page-by-page. A DOCX that expands beyond 50 MB uncompressed is
+  rejected.
 - Chunking uses configured CHUNK_CHARS and CHUNK_OVERLAP (defaults 1000/150),
   section headings and whitespace boundaries. It does not guarantee whole FAQ
   question/answer pairs, especially across PDF pages. Preview before committing.
@@ -85,8 +91,8 @@ flowchart LR
     UI[Streamlit] --> DB[(Supabase PostgreSQL)]
     API[FastAPI] --> Preview[Local extraction and chunk preview]
     Preview --> Approval[Explicit approval]
-    Approval --> HF[Hosted HF embeddings]
-    HF --> Q[(Qdrant)]
+    Approval --> HF[Hosted embeddings]
+    HF --> DB
     API --> DB
     UI --> Query[Question and collection]
     Query --> Search[Shared vector search]

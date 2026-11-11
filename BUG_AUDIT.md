@@ -244,8 +244,10 @@ review and fixed as a single unit.  All three relate to the upload lifecycle
   requests per IP per 60-second window.  HTTP 429 is returned before any embedding
   or DB work begins.  No external dependency added.  Counter resets between test
   runs via an autouse pytest fixture in `tests/conftest.py`.
-- **Caveat**: In-process only — not shared across multiple workers.  A Redis/Supabase
-  counter is needed for multi-worker public deployment.
+- **Caveat (superseded)**: The first version was in-process only. It was replaced by
+  a Supabase-backed counter in `9fbc8a5` (`rag.rate_limits`, migration 002,
+  `src/faq_agent/rate_limiter.py`); the in-process counter is now only the fallback
+  when no database URL is set or the database call fails.
 - **Files changed**: `src/faq_agent/api/routes.py`, `tests/conftest.py`, `tests/test_api.py`
 
 ### Fix #14 — SupabaseLibrary singleton (commit `3941ccf`)
@@ -317,3 +319,39 @@ review and fixed as a single unit.  All three relate to the upload lifecycle
   `vector_score` remains.
 - **Files changed**: `src/faq_agent/supabase_store.py`, `src/faq_agent/api/routes.py`,
   `tests/test_search.py`, `tests/test_basic_rag.py`
+
+---
+
+## Later changes (2026-10-27 to 2026-11-09)
+
+These landed after the tracked code-review findings and are recorded here so the
+audit matches the code. Each links to its commit; details are in the commit messages.
+
+- `9fbc8a5` — rate limiter moved from an in-process counter to `rag.rate_limits`
+  (`rate_limiter.py`, migration `002_add_rate_limits.sql`). `X-Request-Id` response header added.
+- `43f6ed5` — OpenAI supported in `synthesize()`. `42d1d5c` — sends `max_completion_tokens` to OpenAI.
+- `5772efb` — `/ask` and `/search` require `QUERY_API_KEY` and a `PUBLIC_COLLECTIONS`
+  allowlist; unset key fails closed outside `APP_ENV=local`.
+- `26777a0` — rate limit keyed on `X-Forwarded-Client-IP` only for callers holding the query key.
+- `d5607fc` — `get_settings()` coerces env values to field types (int settings previously stayed strings).
+- `4550fc0` — `EMBEDDING_PROVIDER=openai` embedding client.
+- `f8319d2` — `.docx` upload support (`docx_text()` in `ingestion/loader.py`, accepted by
+  `SupabaseLibrary.preview()`) with a 50 MB uncompressed-size guard.
+- `3658bd5` / `808c43f` — Box sync into a Supabase collection (`scripts/sync_box.py`,
+  `src/faq_agent/integrations/`, `SupabaseLibrary.tracked_documents()` / `delete_document()`,
+  optional `metadata` argument on `commit()`, `BOX_*` settings, opt-in hourly GitHub
+  workflow). See `docs/box-sync.md`. Tested against a fake Box client only.
+- `da0c6cc` — autouse `isolate_from_dotenv` fixture in `tests/conftest.py` blanks database,
+  provider and API-key variables for every non-`live` test; adds
+  `tests/test_live_openai_pgvector.py` (skipped unless `RUN_LIVE_TESTS=1`).
+
+**Test status (2026-11-09):** before the `conftest.py` isolation fixture existed, running
+the suite with the real `.env` database URL took about 7.5 minutes and failed 5
+rate-limit tests in `tests/test_api.py`, because `rate_limiter.check()` reached the real
+database. With the fixture in place, six consecutive runs (excluding
+`tests/test_streamlit_ui.py`) gave 112 passed, 4 skipped in 6-10 s, except one run that
+gave 111 passed, 1 failed (`test_query_routes_fail_closed_outside_local`, "Production
+services require HTTPS" from `get_settings()` under `APP_ENV=production`). That failure
+was seen twice, before the fixture existed and once after, and did not recur in five
+later runs. The cause was not established; both URLs in the local `.env` are HTTPS.
+Treat that test as possibly order- or environment-dependent.

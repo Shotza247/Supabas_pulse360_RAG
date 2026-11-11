@@ -85,3 +85,24 @@ def test_empty_search_skips_llm(monkeypatch):
 @pytest.mark.parametrize("raw", ["bad json", "{}", '{"answer":"x","citation_ids":["invented"]}'])
 def test_invalid_citations_abstain(raw):
     assert validate_answer(raw, [HIT])["status"] == "insufficient_evidence"
+
+
+@pytest.mark.parametrize(
+    ("provider", "expected", "forbidden"),
+    [("openai", "max_completion_tokens", "max_tokens"), ("huggingface", "max_tokens", "max_completion_tokens")],
+)
+def test_token_limit_parameter_matches_provider(monkeypatch, provider, expected, forbidden):
+    """gpt-5.x rejects max_tokens; the HF router still expects it."""
+    response = Mock()
+    response.json.return_value = {
+        "choices": [{"message": {"content": '{"answer":"Within 14 days.","citation_ids":["a"]}'}}]
+    }
+    post = Mock(return_value=response)
+    monkeypatch.setattr("faq_agent.llm.client.requests.post", post)
+    settings = Settings(
+        llm_provider=provider, llm_model="m", hf_token="t", openai_api_key="k"
+    )
+    assert synthesize("Refunds?", [HIT], settings)["status"] == "answered"
+    payload = post.call_args.kwargs["json"]
+    assert payload[expected] == 700
+    assert forbidden not in payload

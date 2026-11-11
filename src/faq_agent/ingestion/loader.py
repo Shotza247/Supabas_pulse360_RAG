@@ -1,10 +1,16 @@
 import hashlib
+import io
+import zipfile
 from dataclasses import replace
 from pathlib import Path
 
 from faq_agent.schemas import SourceDocument
 
 SUPPORTED_EXTENSIONS = {".txt", ".md", ".pdf", ".docx"}
+
+# A .docx is a zip file; the upload size cap applies to the compressed bytes only.
+# Refuse archives that would expand far beyond any real document before parsing.
+MAX_DOCX_UNCOMPRESSED = 50 * 1024 * 1024
 
 
 def load_document(path: Path) -> SourceDocument:
@@ -58,8 +64,25 @@ def _read_pdf(path: Path) -> str:
     return "\n".join(page.extract_text() or "" for page in reader.pages)
 
 
-def _read_docx(path: Path) -> str:
+def docx_text(data: bytes) -> str:
+    """Extract text from .docx bytes in document order, including table rows."""
     from docx import Document
+    from docx.table import Table
 
-    doc = Document(str(path))
-    return "\n".join(paragraph.text for paragraph in doc.paragraphs)
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        if sum(item.file_size for item in archive.infolist()) > MAX_DOCX_UNCOMPRESSED:
+            raise ValueError("DOCX expands beyond the allowed size")
+    lines: list[str] = []
+    for block in Document(io.BytesIO(data)).iter_inner_content():
+        if isinstance(block, Table):
+            for row in block.rows:
+                cells = [cell.text.strip() for cell in row.cells]
+                if any(cells):
+                    lines.append(" | ".join(cells))
+        else:
+            lines.append(block.text)
+    return "\n".join(lines)
+
+
+def _read_docx(path: Path) -> str:
+    return docx_text(path.read_bytes())
