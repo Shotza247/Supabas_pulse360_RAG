@@ -1,9 +1,10 @@
 # Supabase pgvector smoke test
 
 The reusable smoke-test page is `supabase_pgvector_test.py`. The main
-`streamlit_app.py` now also uses the direct Supabase PostgreSQL path. Both avoid
-the old Qdrant/SQLite upload API and write to the private Supabase `rag` schema,
-so the schema does not need to be exposed through the Supabase REST API.
+`streamlit_app.py` also uses the direct Supabase PostgreSQL path, and both share
+the helpers in `src/faq_agent/db_helpers.py`. Both write to the private Supabase
+`rag` schema, so the schema does not need to be exposed through the Supabase REST
+API.
 
 The smoke-test page is intentionally narrower: it writes only to
 `test_collection` and marks its documents with a cleanup prefix. The main page
@@ -12,16 +13,16 @@ can select any collection registered in `rag.collections`, including
 
 ## One-time setup
 
-Create or update this private file:
-
-`C:\Users\Jabulani Ndlovu\Downloads\Project Folder\Project Folder\Idea_Not_Started\Supabas_pulse360_RAG\.env`
-
-Add these values:
+Create or update the private `.env` file at the repository root and add:
 
 ```dotenv
 SUPABASE_DATABASE_URL=postgresql://postgres:URL_ENCODED_PASSWORD@db.<project-ref>.supabase.co:5432/postgres?sslmode=require
-SUPABASE_TEST_COLLECTION=test_collection
 ```
+
+The smoke test writes to the collection `test_collection` by default. To use a
+different registered collection, set `SUPABASE_TEST_COLLECTION` in your `.env`
+(it is read by `supabase_pgvector_test.py`; it is intentionally not listed in
+`.env.example`).
 
 Replace `URL_ENCODED_PASSWORD` with the real database password. If the password
 contains characters such as `@`, `#`, `:` or `/`, URL-encode them first. Keep
@@ -72,6 +73,7 @@ design:
 - `rag.documents`: `id`, `collection_id`, `filename`, `category`, `status`
 - `rag.document_chunks`: `id`, `document_id`, `content`, `embedding`
 
-Optional columns such as `checksum`, `metadata`, `chunk_index`, `page_number`,
-`embedding_model`, and `embedding_dimensions` are populated when present. The
+Optional columns such as `sha256`, `checksum`, `content_hash`, `metadata`,
+`chunk_index`, `ordinal`, `page_number`, `embedding_model`, and
+`embedding_dimensions` are populated when present. The
 UI checks the live schema before writing and reports missing required columns.

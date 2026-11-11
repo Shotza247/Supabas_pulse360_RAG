@@ -290,8 +290,6 @@
   <table class="summary-table" style="margin-top:8px">
     <thead><tr><th>Area</th><th>What to do</th><th>Why</th></tr></thead>
     <tbody>
-      <tr><td>Rate limiting</td><td>Replace in-process counter with Redis or a Supabase table</td><td>Current counter not shared across workers — inadequate for multi-worker public deployment</td></tr>
-      <tr><td>Observability</td><td>Propagate <code>request_id</code> as <code>X-Request-Id</code> response header</td><td>Cross-service log correlation once Pulse360 goes live</td></tr>
       <tr><td>Retrieval quality</td><td>Evaluate chunking on real Pulse360 documents; tune <code>CHUNK_CHARS</code> / <code>CHUNK_OVERLAP</code></td><td>Default sizes (1000 / 150) are reasonable but untested against the actual corpus</td></tr>
       <tr><td>Reranking</td><td>Add a lightweight cross-encoder reranker before LLM synthesis</td><td>Retrieval quality — vector similarity alone does not rank by relevance to the question</td></tr>
     </tbody>
