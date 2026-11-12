@@ -19,3 +19,4 @@ data/private/*
 data/public/*
 !data/public/.gitkeep
 .vercel
+.bob/
